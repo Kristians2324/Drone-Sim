@@ -1,20 +1,15 @@
-[gd_scene load_steps=41 format=3 uid="uid://c6b65f7c3c5f"]
+[gd_scene format=3 uid="uid://c6b65f7c3c5f"]
 
-[ext_resource type="Script" path="res://Player.gd" id="1_1"]
-[ext_resource type="Script" path="res://Drone.gd" id="2_2"]
+[ext_resource type="Material" uid="uid://cb7t22kbyvwdc" path="res://assets/textures/skybox.png" id="1_0bbpv"]
+[ext_resource type="Script" path="res://Drone.gd" id="1_rvslj"]
+[ext_resource type="Script" path="res://Player.gd" id="2_0bbpv"]
 
-[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
-sky_top_color = Color(0.384314, 0.454902, 0.54902, 1)
-sky_horizon_color = Color(0.64625, 0.65575, 0.67075, 1)
-ground_bottom_color = Color(0.2, 0.168627, 0.133333, 1)
-ground_horizon_color = Color(0.64625, 0.65575, 0.67075, 1)
-
-[sub_resource type="Sky" id="Sky_1"]
-sky_material = SubResource("ProceduralSkyMaterial_1")
+[sub_resource type="Sky" id="Sky_rarhs"]
+sky_material = ExtResource("1_0bbpv")
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 2
-sky = SubResource("Sky_1")
+sky = SubResource("Sky_rarhs")
 tonemap_mode = 2
 glow_enabled = true
 glow_intensity = 0.8
@@ -47,29 +42,6 @@ emission_enabled = true
 emission = Color(0.3, 0.5, 0.8, 1)
 emission_energy_multiplier = 1.5
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Hand_Glove"]
-albedo_color = Color(0.1, 0.1, 0.1, 1)
-metallic = 0.2
-roughness = 0.4
-
-[sub_resource type="SphereMesh" id="SphereMesh_Hand_Palm"]
-radius = 0.05
-height = 0.1
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_Hand_Mitten"]
-radius = 0.04
-height = 0.12
-
-[sub_resource type="CapsuleMesh" id="CapsuleMesh_Hand_Thumb"]
-radius = 0.015
-height = 0.06
-
-[sub_resource type="SphereShape3D" id="SphereShape3D_HandPhys"]
-radius = 0.08
-
-[sub_resource type="SphereShape3D" id="SphereShape3D_Grab"]
-radius = 0.15
-
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Laptop_Shell"]
 albedo_color = Color(0.6, 0.6, 0.6, 1)
 metallic = 1.0
@@ -92,18 +64,6 @@ size = Vector3(0.08, 0.01, 0.16)
 [sub_resource type="BoxShape3D" id="BoxShape3D_Phone"]
 size = Vector3(0.08, 0.01, 0.16)
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Pen_Blue"]
-albedo_color = Color(0.1, 0.1, 0.8, 1)
-
-[sub_resource type="CylinderMesh" id="CylinderMesh_Pen"]
-top_radius = 0.005
-bottom_radius = 0.005
-height = 0.15
-
-[sub_resource type="CylinderShape3D" id="CylinderShape3D_Pen"]
-height = 0.15
-radius = 0.005
-
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Soda"]
 albedo_color = Color(0.8, 0.1, 0.1, 1)
 metallic = 1.0
@@ -118,15 +78,17 @@ height = 0.12
 height = 0.12
 radius = 0.03
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Paper"]
-albedo_color = Color(1, 1, 1, 1)
-roughness = 1.0
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Pen_Blue"]
+albedo_color = Color(0.1, 0.1, 0.8, 1)
 
-[sub_resource type="BoxMesh" id="BoxMesh_Paper"]
-size = Vector3(0.21, 0.001, 0.297)
+[sub_resource type="CylinderMesh" id="CylinderMesh_Pen"]
+top_radius = 0.005
+bottom_radius = 0.005
+height = 0.15
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_Paper"]
-size = Vector3(0.21, 0.001, 0.297)
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_Pen"]
+height = 0.15
+radius = 0.005
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Mug"]
 albedo_color = Color(0.9, 0.9, 0.9, 1)
@@ -155,258 +117,286 @@ height = 0.4
 height = 0.4
 radius = 0.2
 
-[sub_resource type="BoxMesh" id="BoxMesh_Drone"]
-size = Vector3(0.5, 0.1, 0.5)
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Paper"]
 
-[sub_resource type="BoxShape3D" id="BoxShape3D_Drone"]
-size = Vector3(0.5, 0.1, 0.5)
+[sub_resource type="BoxMesh" id="BoxMesh_Paper"]
+size = Vector3(0.21, 0.001, 0.297)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_Paper"]
+size = Vector3(0.21, 0.001, 0.297)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Drone"]
 albedo_color = Color(0.2, 0.8, 0.2, 1)
 metallic = 0.5
 roughness = 0.3
 
-[node name="Main" type="Node3D"]
+[sub_resource type="BoxMesh" id="BoxMesh_Drone"]
+size = Vector3(0.5, 0.1, 0.5)
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[sub_resource type="BoxShape3D" id="BoxShape3D_Drone"]
+size = Vector3(0.5, 0.1, 0.5)
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_HandPhys"]
+radius = 0.08
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Hand_Glove"]
+albedo_color = Color(0.1, 0.1, 0.1, 1)
+metallic = 0.2
+roughness = 0.4
+
+[sub_resource type="SphereMesh" id="SphereMesh_Hand_Palm"]
+radius = 0.05
+height = 0.1
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_Hand_Mitten"]
+radius = 0.04
+height = 0.12
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_Hand_Thumb"]
+radius = 0.015
+height = 0.06
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_Grab"]
+radius = 0.15
+
+[node name="Main" type="Node3D" unique_id=1932108068]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1320065927]
 environment = SubResource("Environment_1")
 
-[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1050802136]
 transform = Transform3D(-0.866025, -0.433013, 0.25, 0, 0.5, 0.866025, -0.5, 0.75, -0.433013, 0, 10, 0)
 light_energy = 1.2
 shadow_enabled = true
 
-[node name="Office" type="Node3D" parent="."]
+[node name="Office" type="Node3D" parent="." unique_id=634766814]
 
-[node name="Floor" type="CSGBox3D" parent="Office"]
+[node name="Floor" type="CSGBox3D" parent="Office" unique_id=344183169]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.05, 0)
 use_collision = true
 size = Vector3(12, 0.1, 12)
 material = SubResource("StandardMaterial3D_Carpet")
 
-[node name="Walls" type="CSGCombiner3D" parent="Office"]
+[node name="Walls" type="CSGCombiner3D" parent="Office" unique_id=1122730379]
 use_collision = true
 
-[node name="Wall1" type="CSGBox3D" parent="Office/Walls"]
+[node name="Wall1" type="CSGBox3D" parent="Office/Walls" unique_id=1800308738]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -6)
 size = Vector3(12, 5, 0.2)
 material = SubResource("StandardMaterial3D_OfficeWall")
 
-[node name="Wall2" type="CSGBox3D" parent="Office/Walls"]
+[node name="Wall2" type="CSGBox3D" parent="Office/Walls" unique_id=364140054]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 6)
 size = Vector3(12, 5, 0.2)
 material = SubResource("StandardMaterial3D_OfficeWall")
 
-[node name="Wall3" type="CSGBox3D" parent="Office/Walls"]
+[node name="Wall3" type="CSGBox3D" parent="Office/Walls" unique_id=118941748]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 2.5, 0)
 size = Vector3(0.2, 5, 12)
 material = SubResource("StandardMaterial3D_OfficeWall")
 
-[node name="Wall4" type="CSGBox3D" parent="Office/Walls"]
+[node name="Wall4" type="CSGBox3D" parent="Office/Walls" unique_id=873008125]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6, 2.5, 0)
 size = Vector3(0.2, 5, 12)
 material = SubResource("StandardMaterial3D_OfficeWall")
 
-[node name="Window" type="CSGBox3D" parent="Office/Walls"]
+[node name="Window" type="CSGBox3D" parent="Office/Walls" unique_id=950428925]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, -6)
 operation = 2
 size = Vector3(5, 3, 0.5)
 
-[node name="Desk" type="Node3D" parent="Office"]
+[node name="Desk" type="Node3D" parent="Office" unique_id=110164544]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -4)
 
-[node name="Top" type="CSGBox3D" parent="Office/Desk"]
+[node name="Top" type="CSGBox3D" parent="Office/Desk" unique_id=1842226797]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.75, 0)
 use_collision = true
 size = Vector3(4, 0.05, 2)
 material = SubResource("StandardMaterial3D_WoodDesk")
 
-[node name="Leg1" type="CSGBox3D" parent="Office/Desk"]
+[node name="Leg1" type="CSGBox3D" parent="Office/Desk" unique_id=924039340]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1.8, 0.35, -0.8)
 use_collision = true
 size = Vector3(0.1, 0.7, 0.1)
 material = SubResource("StandardMaterial3D_Metal_Dark")
 
-[node name="Leg2" type="CSGBox3D" parent="Office/Desk"]
+[node name="Leg2" type="CSGBox3D" parent="Office/Desk" unique_id=507952448]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.8, 0.35, -0.8)
 use_collision = true
 size = Vector3(0.1, 0.7, 0.1)
 material = SubResource("StandardMaterial3D_Metal_Dark")
 
-[node name="Monitor" type="Node3D" parent="Office/Desk"]
+[node name="Monitor" type="Node3D" parent="Office/Desk" unique_id=1181161764]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.78, -0.6)
 
-[node name="Panel" type="CSGBox3D" parent="Office/Desk/Monitor"]
+[node name="Panel" type="CSGBox3D" parent="Office/Desk/Monitor" unique_id=643699920]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.4, 0)
 use_collision = true
 size = Vector3(1.2, 0.7, 0.05)
 material = SubResource("StandardMaterial3D_Metal_Dark")
 
-[node name="Screen" type="CSGBox3D" parent="Office/Desk/Monitor/Panel"]
+[node name="Screen" type="CSGBox3D" parent="Office/Desk/Monitor/Panel" unique_id=342290429]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.03)
 size = Vector3(1.15, 0.65, 0.01)
 material = SubResource("StandardMaterial3D_Screen_Active")
 
-[node name="PhysicsObjects" type="Node3D" parent="."]
+[node name="PhysicsObjects" type="Node3D" parent="." unique_id=1445324320]
 
-[node name="Laptop" type="RigidBody3D" parent="PhysicsObjects"]
+[node name="Laptop" type="RigidBody3D" parent="PhysicsObjects" unique_id=1440627364]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.8, 0.8, -3.8)
 mass = 2.0
 
-[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Laptop"]
-mesh = SubResource("BoxMesh_Laptop_Base")
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Laptop" unique_id=1424996262]
 material_override = SubResource("StandardMaterial3D_Laptop_Shell")
+mesh = SubResource("BoxMesh_Laptop_Base")
 
-[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Laptop"]
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Laptop" unique_id=110004351]
 shape = SubResource("BoxShape3D_Laptop")
 
-[node name="Phone" type="RigidBody3D" parent="PhysicsObjects"]
+[node name="Phone" type="RigidBody3D" parent="PhysicsObjects" unique_id=567145555]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0.8, -3.5)
 mass = 0.2
 
-[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Phone"]
-mesh = SubResource("BoxMesh_Phone")
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Phone" unique_id=1299310571]
 material_override = SubResource("StandardMaterial3D_Phone")
+mesh = SubResource("BoxMesh_Phone")
 
-[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Phone"]
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Phone" unique_id=387649817]
 shape = SubResource("BoxShape3D_Phone")
 
-[node name="SodaCan" type="RigidBody3D" parent="PhysicsObjects"]
+[node name="SodaCan" type="RigidBody3D" parent="PhysicsObjects" unique_id=785481951]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.2, 0.85, -3.7)
 mass = 0.3
 
-[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/SodaCan"]
-mesh = SubResource("CylinderMesh_Soda")
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/SodaCan" unique_id=1505872940]
 material_override = SubResource("StandardMaterial3D_Soda")
+mesh = SubResource("CylinderMesh_Soda")
 
-[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/SodaCan"]
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/SodaCan" unique_id=1161380844]
 shape = SubResource("CylinderShape3D_Soda")
 
-[node name="Pen" type="RigidBody3D" parent="PhysicsObjects"]
+[node name="Pen" type="RigidBody3D" parent="PhysicsObjects" unique_id=785265979]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, 0.8, -3.2)
 mass = 0.05
 
-[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Pen"]
-mesh = SubResource("CylinderMesh_Pen")
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Pen" unique_id=761081532]
 material_override = SubResource("StandardMaterial3D_Pen_Blue")
+mesh = SubResource("CylinderMesh_Pen")
 
-[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Pen"]
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Pen" unique_id=615733449]
 shape = SubResource("CylinderShape3D_Pen")
 
-[node name="CoffeeMug" type="RigidBody3D" parent="PhysicsObjects"]
+[node name="CoffeeMug" type="RigidBody3D" parent="PhysicsObjects" unique_id=1469524561]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.4, 0.85, -3.4)
 mass = 0.4
 
-[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/CoffeeMug"]
-mesh = SubResource("CylinderMesh_Mug")
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/CoffeeMug" unique_id=1391896741]
 material_override = SubResource("StandardMaterial3D_Mug")
+mesh = SubResource("CylinderMesh_Mug")
 
-[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/CoffeeMug"]
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/CoffeeMug" unique_id=9175863]
 shape = SubResource("CylinderShape3D_Mug")
 
-[node name="TrashCan" type="RigidBody3D" parent="PhysicsObjects"]
+[node name="TrashCan" type="RigidBody3D" parent="PhysicsObjects" unique_id=1486711297]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0.2, -4.5)
-mass = 1.0
 
-[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/TrashCan"]
-mesh = SubResource("CylinderMesh_TrashCan")
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/TrashCan" unique_id=1126807845]
 material_override = SubResource("StandardMaterial3D_TrashCan")
+mesh = SubResource("CylinderMesh_TrashCan")
 
-[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/TrashCan"]
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/TrashCan" unique_id=1764165082]
 shape = SubResource("CylinderShape3D_TrashCan")
 
-[node name="Paper" type="RigidBody3D" parent="PhysicsObjects"]
+[node name="Paper" type="RigidBody3D" parent="PhysicsObjects" unique_id=604713347]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, -3.5)
 mass = 0.01
 
-[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Paper"]
-mesh = SubResource("BoxMesh_Paper")
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Paper" unique_id=341370959]
 material_override = SubResource("StandardMaterial3D_Paper")
+mesh = SubResource("BoxMesh_Paper")
 
-[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Paper"]
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Paper" unique_id=1065390520]
 shape = SubResource("BoxShape3D_Paper")
 
-[node name="Drone" type="RigidBody3D" parent="PhysicsObjects"]
+[node name="Drone" type="RigidBody3D" parent="PhysicsObjects" unique_id=1292183184]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
-mass = 1.0
-script = ExtResource("2_2")
+script = ExtResource("1_rvslj")
 
-[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Drone"]
-mesh = SubResource("BoxMesh_Drone")
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Drone" unique_id=1805104036]
 material_override = SubResource("StandardMaterial3D_Drone")
+mesh = SubResource("BoxMesh_Drone")
 
-[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Drone"]
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Drone" unique_id=1537945452]
 shape = SubResource("BoxShape3D_Drone")
 
-[node name="XROrigin3D" type="XROrigin3D" parent="."]
-script = ExtResource("1_1")
-groups = ["xr_origin"]
+[node name="XROrigin3D" type="XROrigin3D" parent="." unique_id=68867270]
+script = ExtResource("2_0bbpv")
 
-[node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D"]
+[node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D" unique_id=1269457094]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
 
-[node name="LeftHand" type="XRController3D" parent="XROrigin3D"]
+[node name="LeftHand" type="XRController3D" parent="XROrigin3D" unique_id=1564686550]
 tracker = &"left_hand"
 
-[node name="RightHand" type="XRController3D" parent="XROrigin3D"]
+[node name="RightHand" type="XRController3D" parent="XROrigin3D" unique_id=724504816]
 tracker = &"right_hand"
 
-[node name="LeftPhysicalHand" type="CharacterBody3D" parent="XROrigin3D"]
+[node name="LeftPhysicalHand" type="CharacterBody3D" parent="XROrigin3D" unique_id=1649998974]
 collision_layer = 2
 collision_mask = 3
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="XROrigin3D/LeftPhysicalHand"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="XROrigin3D/LeftPhysicalHand" unique_id=1318968971]
 shape = SubResource("SphereShape3D_HandPhys")
 
-[node name="Generic6DOFJoint3D" type="Generic6DOFJoint3D" parent="XROrigin3D/LeftPhysicalHand"]
+[node name="Generic6DOFJoint3D" type="Generic6DOFJoint3D" parent="XROrigin3D/LeftPhysicalHand" unique_id=1628016428]
 
-[node name="HandMesh" type="Node3D" parent="XROrigin3D/LeftPhysicalHand"]
+[node name="HandMesh" type="Node3D" parent="XROrigin3D/LeftPhysicalHand" unique_id=1476951709]
 
-[node name="Palm" type="MeshInstance3D" parent="XROrigin3D/LeftPhysicalHand/HandMesh"]
+[node name="Palm" type="MeshInstance3D" parent="XROrigin3D/LeftPhysicalHand/HandMesh" unique_id=102415073]
+material_override = SubResource("StandardMaterial3D_Hand_Glove")
 mesh = SubResource("SphereMesh_Hand_Palm")
-material_override = SubResource("StandardMaterial3D_Hand_Glove")
 
-[node name="Mitten" type="MeshInstance3D" parent="XROrigin3D/LeftPhysicalHand/HandMesh"]
+[node name="Mitten" type="MeshInstance3D" parent="XROrigin3D/LeftPhysicalHand/HandMesh" unique_id=446488109]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.05)
+material_override = SubResource("StandardMaterial3D_Hand_Glove")
 mesh = SubResource("CapsuleMesh_Hand_Mitten")
-material_override = SubResource("StandardMaterial3D_Hand_Glove")
 
-[node name="Thumb" type="MeshInstance3D" parent="XROrigin3D/LeftPhysicalHand/HandMesh"]
+[node name="Thumb" type="MeshInstance3D" parent="XROrigin3D/LeftPhysicalHand/HandMesh" unique_id=1980505313]
 transform = Transform3D(0.866025, 0.5, 0, -0.5, 0.866025, 0, 0, 0, 1, 0.05, 0, -0.02)
-mesh = SubResource("CapsuleMesh_Hand_Thumb")
 material_override = SubResource("StandardMaterial3D_Hand_Glove")
+mesh = SubResource("CapsuleMesh_Hand_Thumb")
 
-[node name="GrabArea" type="Area3D" parent="XROrigin3D/LeftPhysicalHand"]
+[node name="GrabArea" type="Area3D" parent="XROrigin3D/LeftPhysicalHand" unique_id=30919068]
 
-[node name="Collision" type="CollisionShape3D" parent="XROrigin3D/LeftPhysicalHand/GrabArea"]
+[node name="Collision" type="CollisionShape3D" parent="XROrigin3D/LeftPhysicalHand/GrabArea" unique_id=1120574493]
 shape = SubResource("SphereShape3D_Grab")
 
-[node name="RightPhysicalHand" type="CharacterBody3D" parent="XROrigin3D"]
+[node name="RightPhysicalHand" type="CharacterBody3D" parent="XROrigin3D" unique_id=1399074084]
 collision_layer = 2
 collision_mask = 3
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="XROrigin3D/RightPhysicalHand"]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="XROrigin3D/RightPhysicalHand" unique_id=1254475082]
 shape = SubResource("SphereShape3D_HandPhys")
 
-[node name="Generic6DOFJoint3D" type="Generic6DOFJoint3D" parent="XROrigin3D/RightPhysicalHand"]
+[node name="Generic6DOFJoint3D" type="Generic6DOFJoint3D" parent="XROrigin3D/RightPhysicalHand" unique_id=1746554316]
 
-[node name="HandMesh" type="Node3D" parent="XROrigin3D/RightPhysicalHand"]
+[node name="HandMesh" type="Node3D" parent="XROrigin3D/RightPhysicalHand" unique_id=719912105]
 
-[node name="Palm" type="MeshInstance3D" parent="XROrigin3D/RightPhysicalHand/HandMesh"]
+[node name="Palm" type="MeshInstance3D" parent="XROrigin3D/RightPhysicalHand/HandMesh" unique_id=1748432651]
+material_override = SubResource("StandardMaterial3D_Hand_Glove")
 mesh = SubResource("SphereMesh_Hand_Palm")
-material_override = SubResource("StandardMaterial3D_Hand_Glove")
 
-[node name="Mitten" type="MeshInstance3D" parent="XROrigin3D/RightPhysicalHand/HandMesh"]
+[node name="Mitten" type="MeshInstance3D" parent="XROrigin3D/RightPhysicalHand/HandMesh" unique_id=86235792]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.05)
+material_override = SubResource("StandardMaterial3D_Hand_Glove")
 mesh = SubResource("CapsuleMesh_Hand_Mitten")
-material_override = SubResource("StandardMaterial3D_Hand_Glove")
 
-[node name="Thumb" type="MeshInstance3D" parent="XROrigin3D/RightPhysicalHand/HandMesh"]
+[node name="Thumb" type="MeshInstance3D" parent="XROrigin3D/RightPhysicalHand/HandMesh" unique_id=1968220897]
 transform = Transform3D(0.866025, -0.5, 0, 0.5, 0.866025, 0, 0, 0, 1, -0.05, 0, -0.02)
-mesh = SubResource("CapsuleMesh_Hand_Thumb")
 material_override = SubResource("StandardMaterial3D_Hand_Glove")
+mesh = SubResource("CapsuleMesh_Hand_Thumb")
 
-[node name="GrabArea" type="Area3D" parent="XROrigin3D/RightPhysicalHand"]
+[node name="GrabArea" type="Area3D" parent="XROrigin3D/RightPhysicalHand" unique_id=161768694]
 
-[node name="Collision" type="CollisionShape3D" parent="XROrigin3D/RightPhysicalHand/GrabArea"]
+[node name="Collision" type="CollisionShape3D" parent="XROrigin3D/RightPhysicalHand/GrabArea" unique_id=1849925624]
 shape = SubResource("SphereShape3D_Grab")

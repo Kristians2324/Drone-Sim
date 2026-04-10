@@ -15,8 +15,12 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 [application]
 
 config/name="OculusQuestGodotExercise"
-run/main_scene="res://Main.tscn"
+run/main_scene="uid://c6b65f7c3c5f"
 config/features=PackedStringArray("4.6", "Mobile")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/terrain_3d/plugin.cfg")
 
 [rendering]
 
