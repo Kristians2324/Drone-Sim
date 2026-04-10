@@ -1,6 +1,7 @@
-[gd_scene load_steps=38 format=3 uid="uid://c6b65f7c3c5f"]
+[gd_scene load_steps=41 format=3 uid="uid://c6b65f7c3c5f"]
 
 [ext_resource type="Script" path="res://Player.gd" id="1_1"]
+[ext_resource type="Script" path="res://Drone.gd" id="2_2"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_1"]
 sky_top_color = Color(0.384314, 0.454902, 0.54902, 1)
@@ -153,6 +154,17 @@ height = 0.4
 [sub_resource type="CylinderShape3D" id="CylinderShape3D_TrashCan"]
 height = 0.4
 radius = 0.2
+
+[sub_resource type="BoxMesh" id="BoxMesh_Drone"]
+size = Vector3(0.5, 0.1, 0.5)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_Drone"]
+size = Vector3(0.5, 0.1, 0.5)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Drone"]
+albedo_color = Color(0.2, 0.8, 0.2, 1)
+metallic = 0.5
+roughness = 0.3
 
 [node name="Main" type="Node3D"]
 
@@ -314,8 +326,21 @@ material_override = SubResource("StandardMaterial3D_Paper")
 [node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Paper"]
 shape = SubResource("BoxShape3D_Paper")
 
+[node name="Drone" type="RigidBody3D" parent="PhysicsObjects"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
+mass = 1.0
+script = ExtResource("2_2")
+
+[node name="Mesh" type="MeshInstance3D" parent="PhysicsObjects/Drone"]
+mesh = SubResource("BoxMesh_Drone")
+material_override = SubResource("StandardMaterial3D_Drone")
+
+[node name="Collision" type="CollisionShape3D" parent="PhysicsObjects/Drone"]
+shape = SubResource("BoxShape3D_Drone")
+
 [node name="XROrigin3D" type="XROrigin3D" parent="."]
 script = ExtResource("1_1")
+groups = ["xr_origin"]
 
 [node name="XRCamera3D" type="XRCamera3D" parent="XROrigin3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.7, 0)
