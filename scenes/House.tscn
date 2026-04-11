@@ -1,0 +1,22 @@
+[gd_scene load_steps=4 format=3 uid="uid://b5k6l7m8n9o0"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Wall"]
+albedo_color = Color(0.8, 0.7, 0.6, 1)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Roof"]
+albedo_color = Color(0.4, 0.1, 0.1, 1)
+
+[node name="House" type="Node3D"]
+
+[node name="Body" type="CSGBox3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+size = Vector3(4, 3, 4)
+material = SubResource("StandardMaterial3D_Wall")
+
+[node name="Roof" type="CSGPolygon3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+polygon = PackedVector2Array(-2.5, 0, 2.5, 0, 0, 2)
+mode = 1
+spin_degrees = 360.0
+spin_sides = 4
+material = SubResource("StandardMaterial3D_Roof")
