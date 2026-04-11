@@ -6,7 +6,7 @@
 [ext_resource type="Script" path="res://scripts/WorldManager.gd" id="5_wm"]
 [ext_resource type="Script" path="res://scripts/WorldDetailManager.gd" id="7_wdm"]
 [ext_resource type="PackedScene" path="res://scenes/Mountain.tscn" id="6_mtn"]
-[ext_resource type="PackedScene" path="res://scenes/House.tscn" id="8_hse"]
+[ext_resource type="Script" path="res://scripts/TownGenerator.gd" id="9_twn"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_DroneBody"]
 albedo_color = Color(0.15, 0.15, 0.2, 1)
@@ -45,11 +45,14 @@ script = ExtResource("5_wm")
 [node name="Terrain" parent="." instance=ExtResource("4_ter")]
 
 [node name="Drone" type="RigidBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+axis_lock_angular_x = false
+axis_lock_angular_y = false
+axis_lock_angular_z = false
 mass = 1.0
 gravity_scale = 1.0
 linear_damp = 0.5
-angular_damp = 5.0
+angular_damp = 6.0
 script = ExtResource("1_rvslj")
 
 [node name="Design" type="Node3D" parent="Drone"]
@@ -103,32 +106,17 @@ current = true
 [node name="Mountains" type="Node3D" parent="."]
 
 [node name="Mountain1" parent="Mountains" instance=ExtResource("6_mtn")]
-transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 120, -5, -150)
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 220, -10, -350)
 
 [node name="Mountain2" parent="Mountains" instance=ExtResource("6_mtn")]
-transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, -200, -10, -50)
-
-[node name="Mountain3" parent="Mountains" instance=ExtResource("6_mtn")]
-transform = Transform3D(2.5, 0, 0, 0, 2.5, 0, 0, 0, 2.5, 50, -8, 200)
-
-[node name="Mountain4" parent="Mountains" instance=ExtResource("6_mtn")]
-transform = Transform3D(4, 0, 0, 0, 4, 0, 0, 0, 4, -80, -15, -250)
+transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, -400, -20, -150)
 
 [node name="WorldDetail" type="Node3D" parent="."]
 script = ExtResource("7_wdm")
-tree_count = 200
-rock_count = 100
+tree_count = 300
+rock_count = 150
 
-[node name="Village" type="Node3D" parent="."]
-
-[node name="House1" parent="Village" instance=ExtResource("8_hse")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0, 20)
-
-[node name="House2" parent="Village" instance=ExtResource("8_hse")]
-transform = Transform3D(0.965926, 0, 0.258819, 0, 1, 0, -0.258819, 0, 0.965926, 25, 0, 30)
-
-[node name="House3" parent="Village" instance=ExtResource("8_hse")]
-transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, 15, 0, 35)
-
-[node name="House4" parent="Village" instance=ExtResource("8_hse")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 35, 0, 20)
+[node name="Town" type="Node3D" parent="."]
+script = ExtResource("9_twn")
+grid_size = 10
+spacing = 20.0

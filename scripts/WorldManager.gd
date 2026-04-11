@@ -1,6 +1,6 @@
 extends Node3D
 
-@onready var environment_parent = get_node("../Environment") # Wait, I'll need to check the path
+@onready var environment_parent = get_node("Environment")
 
 var day_scene = preload("res://scenes/Environment.tscn")
 var night_scene = preload("res://scenes/Environment_Night.tscn")
