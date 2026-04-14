@@ -57,8 +57,8 @@ func _physics_process(delta):
 		if Input.is_key_pressed(KEY_E): target.y = -1.0
 		if Input.is_key_pressed(KEY_W): target.z = 1.0
 		if Input.is_key_pressed(KEY_S): target.z = -1.0
-		if Input.is_key_pressed(KEY_A): target.w = 1.0
-		if Input.is_key_pressed(KEY_D): target.w = -1.0
+		if Input.is_key_pressed(KEY_A): target.w = -1.0
+		if Input.is_key_pressed(KEY_D): target.w = 1.0
 
 	smoothed_input = smoothed_input.lerp(target, delta * INPUT_SMOOTHING)
 
@@ -71,13 +71,13 @@ func _physics_process(delta):
 	
 	# Horizontal directional force (High-Torque for definite movement)
 	var forward_force = -global_transform.basis.z * smoothed_input.z * FORWARD_POWER
-	var strafe_force = global_transform.basis.x * smoothed_input.w * FORWARD_POWER
+	var strafe_force = -global_transform.basis.x * smoothed_input.w * FORWARD_POWER
 	
 	# Apply all forces
 	apply_central_force(vertical_thrust + forward_force + strafe_force)
 
 	# 3. Rotation
-	apply_torque(global_transform.basis.x * smoothed_input.z * TURN_POWER)
+	apply_torque(global_transform.basis.x * -smoothed_input.z * TURN_POWER)
 	apply_torque(global_transform.basis.z * smoothed_input.w * TURN_POWER)
 	apply_torque(global_transform.basis.y * smoothed_input.y * TURN_POWER)
 	

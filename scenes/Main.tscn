@@ -1,33 +1,33 @@
-[gd_scene load_steps=12 format=3 uid="uid://c6b65f7c3c5f"]
+[gd_scene format=3 uid="uid://c6b65f7c3c5f"]
 
-[ext_resource type="Script" path="res://scripts/Drone.gd" id="1_rvslj"]
-[ext_resource type="PackedScene" path="res://scenes/Environment.tscn" id="3_env"]
-[ext_resource type="PackedScene" path="res://scenes/Terrain.tscn" id="4_ter"]
-[ext_resource type="Script" path="res://scripts/WorldManager.gd" id="5_wm"]
-[ext_resource type="Script" path="res://scripts/WorldDetailManager.gd" id="7_wdm"]
-[ext_resource type="PackedScene" path="res://scenes/Mountain.tscn" id="6_mtn"]
-[ext_resource type="Script" path="res://scripts/TownGenerator.gd" id="9_twn"]
+[ext_resource type="Script" uid="uid://bblgsci53sppu" path="res://scripts/Drone.gd" id="1_rvslj"]
+[ext_resource type="PackedScene" uid="uid://b8k1m7d5j5q6n" path="res://scenes/Environment.tscn" id="3_env"]
+[ext_resource type="PackedScene" uid="uid://d1k3f4g5h6j7" path="res://scenes/Terrain.tscn" id="4_ter"]
+[ext_resource type="Script" uid="uid://c5sikpkaigoxw" path="res://scripts/WorldManager.gd" id="5_wm"]
+[ext_resource type="PackedScene" uid="uid://b2k3l4m5n6o7" path="res://scenes/Mountain.tscn" id="6_mtn"]
+[ext_resource type="Script" uid="uid://c1ishtt5uljad" path="res://scripts/WorldDetailManager.gd" id="7_wdm"]
+[ext_resource type="Script" uid="uid://8tanx2fyhn25" path="res://scripts/TownGenerator.gd" id="9_twn"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_DroneBody"]
 albedo_color = Color(0.15, 0.15, 0.2, 1)
 metallic = 0.8
 roughness = 0.2
 
+[sub_resource type="BoxMesh" id="BoxMesh_Body"]
+size = Vector3(0.4, 0.15, 0.6)
+
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_DroneArm"]
 albedo_color = Color(0.3, 0.3, 0.35, 1)
 metallic = 0.7
 roughness = 0.3
 
-[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Propeller"]
-albedo_color = Color(0.1, 0.1, 0.1, 0.8)
-transparency = 1
-metallic = 0.5
-
-[sub_resource type="BoxMesh" id="BoxMesh_Body"]
-size = Vector3(0.4, 0.15, 0.6)
-
 [sub_resource type="BoxMesh" id="BoxMesh_Arm"]
 size = Vector3(0.1, 0.05, 0.8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Propeller"]
+transparency = 1
+albedo_color = Color(0.1, 0.1, 0.1, 0.8)
+metallic = 0.5
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_Prop"]
 top_radius = 0.25
@@ -37,86 +37,81 @@ height = 0.01
 [sub_resource type="BoxShape3D" id="BoxShape3D_Drone"]
 size = Vector3(1.2, 0.2, 1.2)
 
-[node name="Main" type="Node3D"]
+[node name="Main" type="Node3D" unique_id=383992290]
 script = ExtResource("5_wm")
 
-[node name="Environment" parent="." instance=ExtResource("3_env")]
+[node name="Environment" parent="." unique_id=1053846627 instance=ExtResource("3_env")]
 
-[node name="Terrain" parent="." instance=ExtResource("4_ter")]
+[node name="Terrain" parent="." unique_id=244573142 instance=ExtResource("4_ter")]
 
-[node name="Drone" type="RigidBody3D" parent="."]
+[node name="Drone" type="RigidBody3D" parent="." unique_id=494787589]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
-axis_lock_angular_x = false
-axis_lock_angular_y = false
-axis_lock_angular_z = false
-mass = 1.0
-gravity_scale = 1.0
 linear_damp = 0.5
 angular_damp = 6.0
 script = ExtResource("1_rvslj")
 
-[node name="Design" type="Node3D" parent="Drone"]
+[node name="Design" type="Node3D" parent="Drone" unique_id=569809607]
 
-[node name="Body" type="MeshInstance3D" parent="Drone/Design"]
+[node name="Body" type="MeshInstance3D" parent="Drone/Design" unique_id=1597958724]
 material_override = SubResource("StandardMaterial3D_DroneBody")
 mesh = SubResource("BoxMesh_Body")
 
-[node name="Arm1" type="MeshInstance3D" parent="Drone/Design"]
+[node name="Arm1" type="MeshInstance3D" parent="Drone/Design" unique_id=527739200]
 transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 0, 0, 0)
 material_override = SubResource("StandardMaterial3D_DroneArm")
 mesh = SubResource("BoxMesh_Arm")
 
-[node name="Arm2" type="MeshInstance3D" parent="Drone/Design"]
+[node name="Arm2" type="MeshInstance3D" parent="Drone/Design" unique_id=1271388630]
 transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, 0, 0, 0)
 material_override = SubResource("StandardMaterial3D_DroneArm")
 mesh = SubResource("BoxMesh_Arm")
 
-[node name="Props" type="Node3D" parent="Drone/Design"]
+[node name="Props" type="Node3D" parent="Drone/Design" unique_id=705134493]
 
-[node name="Prop1" type="MeshInstance3D" parent="Drone/Design/Props"]
+[node name="Prop1" type="MeshInstance3D" parent="Drone/Design/Props" unique_id=248431069]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, 0.1, 0.3)
 material_override = SubResource("StandardMaterial3D_Propeller")
 mesh = SubResource("CylinderMesh_Prop")
 
-[node name="Prop2" type="MeshInstance3D" parent="Drone/Design/Props"]
+[node name="Prop2" type="MeshInstance3D" parent="Drone/Design/Props" unique_id=126399750]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0.1, 0.3)
 material_override = SubResource("StandardMaterial3D_Propeller")
 mesh = SubResource("CylinderMesh_Prop")
 
-[node name="Prop3" type="MeshInstance3D" parent="Drone/Design/Props"]
+[node name="Prop3" type="MeshInstance3D" parent="Drone/Design/Props" unique_id=1305046193]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, 0.1, -0.3)
 material_override = SubResource("StandardMaterial3D_Propeller")
 mesh = SubResource("CylinderMesh_Prop")
 
-[node name="Prop4" type="MeshInstance3D" parent="Drone/Design/Props"]
+[node name="Prop4" type="MeshInstance3D" parent="Drone/Design/Props" unique_id=1716685292]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0.1, -0.3)
 material_override = SubResource("StandardMaterial3D_Propeller")
 mesh = SubResource("CylinderMesh_Prop")
 
-[node name="Collision" type="CollisionShape3D" parent="Drone"]
+[node name="Collision" type="CollisionShape3D" parent="Drone" unique_id=1593778270]
 shape = SubResource("BoxShape3D_Drone")
 
-[node name="SpringArm3D" type="SpringArm3D" parent="Drone"]
+[node name="SpringArm3D" type="SpringArm3D" parent="Drone" unique_id=376241814]
 transform = Transform3D(1, 0, 0, 0, 0.939693, 0.34202, 0, -0.34202, 0.939693, 0, 0.5, 0)
 spring_length = 4.0
 
-[node name="Camera3D" type="Camera3D" parent="Drone/SpringArm3D"]
+[node name="Camera3D" type="Camera3D" parent="Drone/SpringArm3D" unique_id=444309196]
 current = true
 
-[node name="Mountains" type="Node3D" parent="."]
+[node name="Mountains" type="Node3D" parent="." unique_id=73596002]
 
-[node name="Mountain1" parent="Mountains" instance=ExtResource("6_mtn")]
+[node name="Mountain1" parent="Mountains" unique_id=880629804 instance=ExtResource("6_mtn")]
 transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 220, -10, -350)
 
-[node name="Mountain2" parent="Mountains" instance=ExtResource("6_mtn")]
+[node name="Mountain2" parent="Mountains" unique_id=145089661 instance=ExtResource("6_mtn")]
 transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, -400, -20, -150)
 
-[node name="WorldDetail" type="Node3D" parent="."]
+[node name="WorldDetail" type="Node3D" parent="." unique_id=412141597]
 script = ExtResource("7_wdm")
 tree_count = 300
 rock_count = 150
 
-[node name="Town" type="Node3D" parent="."]
+[node name="Town" type="Node3D" parent="." unique_id=1236871113]
 script = ExtResource("9_twn")
 grid_size = 10
 spacing = 20.0
