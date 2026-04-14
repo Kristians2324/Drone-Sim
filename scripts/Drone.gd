@@ -9,6 +9,12 @@ const INPUT_SMOOTHING = 4.0    # Smooth but responsive
 
 var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 
+# Camera toggle
+var is_first_person = false
+var third_person_camera: Camera3D
+var first_person_camera: Camera3D
+var camera_toggle_cooldown = 0.0
+
 @onready var label: Label
 @onready var gravity = ProjectSettings.get_setting("physics/3d/default_gravity")
 @onready var design = $Design
@@ -22,6 +28,18 @@ func _ready():
 	
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	
+	# Setup cameras
+	third_person_camera = $SpringArm3D/Camera3D
+	
+	# Create first-person camera positioned at drone center
+	first_person_camera = Camera3D.new()
+	design.add_child(first_person_camera)
+	first_person_camera.position = Vector3(0, 0.1, 0)  # Slightly above center
+	
+	# Start with third-person camera active
+	third_person_camera.current = true
+	first_person_camera.current = false
+	
 	# Detailed UI Instructions
 	var canvas = CanvasLayer.new()
 	add_child(canvas)
@@ -34,6 +52,7 @@ func _ready():
 				 "Q / E      : Yaw (Rotate) Left / Right\n" + \
 				 "SPACE      : Increase Thrust (Go Up)\n" + \
 				 "SHIFT      : Decrease Thrust (Go Down)\n" + \
+				 "C          : Toggle Camera View\n" + \
 				 "T          : Toggle Day / Night Cycle\n" + \
 				 "R          : Reset Simulation\n" + \
 				 "ESC        : Quit Game"
@@ -91,5 +110,16 @@ func _physics_process(delta):
 		prop.rotate_y(delta * 30.0)
 
 func _process(_delta):
+	# Update camera toggle cooldown
+	if camera_toggle_cooldown > 0:
+		camera_toggle_cooldown -= _delta
+	
+	# Camera toggle (with cooldown to prevent rapid toggling)
+	if Input.is_key_pressed(KEY_C) and camera_toggle_cooldown <= 0:
+		is_first_person = !is_first_person
+		third_person_camera.current = !is_first_person
+		first_person_camera.current = is_first_person
+		camera_toggle_cooldown = 0.2  # 200ms between toggles
+	
 	if Input.is_key_pressed(KEY_R): get_tree().reload_current_scene()
 	if Input.is_key_pressed(KEY_ESCAPE): get_tree().quit()
