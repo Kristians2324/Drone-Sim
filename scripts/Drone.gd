@@ -17,6 +17,14 @@ var xr_origin: XROrigin3D
 var xr_camera: XRCamera3D
 var camera_toggle_cooldown = 0.0
 
+# Audio Variables
+var motor_audio: AudioStreamPlayer3D
+var motor_playback: AudioStreamGeneratorPlayback
+var crash_audio: AudioStreamPlayer3D
+var crash_playback: AudioStreamGeneratorPlayback
+var audio_hz = 44100.0
+var motor_phase = 0.0
+
 @onready var design = $Design
 @onready var collision_shape: CollisionShape3D = $Collision
 
@@ -28,6 +36,11 @@ func _ready():
 	angular_damp = 8.0
 	
 	process_mode = Node.PROCESS_MODE_PAUSABLE
+	
+	# Enable collision detection for sound
+	contact_monitor = true
+	max_contacts_reported = 4
+	body_entered.connect(_on_drone_collision)
 	
 	# Ensure collision shape is properly set on the body
 	collision_shape.shape = BoxShape3D.new()
@@ -46,6 +59,9 @@ func _ready():
 	
 	# Initial camera state
 	update_camera_views()
+	
+	# Setup procedural audio
+	setup_drone_audio()
 
 func setup_vr():
 	# Create VR rig at the FPV position
@@ -97,6 +113,9 @@ func _physics_process(delta):
 	
 	smoothed_input = smoothed_input.lerp(target, delta * INPUT_SMOOTHING)
 
+	# Fill audio buffer
+	fill_motor_buffer()
+
 	# 2. MOVEMENT
 	var local_up = global_transform.basis.y
 	var vertical_thrust = local_up * smoothed_input.x * THROTTLE_POWER
@@ -131,3 +150,67 @@ func _process(_delta):
 		camera_toggle_cooldown = 0.2
 	
 	if Input.is_key_pressed(KEY_R): get_tree().reload_current_scene()
+
+func setup_drone_audio():
+	# 1. Continuous Motor Sound
+	motor_audio = AudioStreamPlayer3D.new()
+	var generator = AudioStreamGenerator.new()
+	generator.buffer_length = 0.1
+	motor_audio.stream = generator
+	motor_audio.unit_size = 5.0
+	motor_audio.max_distance = 100.0
+	add_child(motor_audio)
+	motor_audio.play()
+	motor_playback = motor_audio.get_stream_playback()
+	
+	# 2. Crash Sound Generator
+	crash_audio = AudioStreamPlayer3D.new()
+	var crash_gen = AudioStreamGenerator.new()
+	crash_gen.buffer_length = 0.05
+	crash_audio.stream = crash_gen
+	add_child(crash_audio)
+	crash_playback = crash_audio.get_stream_playback()
+
+func _on_drone_collision(_body):
+	# Calculate impact intensity based on velocity
+	var impact = linear_velocity.length()
+	if impact > 1.5: # Lower threshold to catch more bumps
+		play_crash_sound(impact)
+
+func play_crash_sound(intensity: float):
+	if crash_playback == null: return
+	
+	# Push a short, sharp burst of noise for the 'thud'
+	var vol = clamp(intensity / 10.0, 0.2, 0.5) 
+	var frames_to_push = 2205 # ~50ms of sound
+	
+	for i in range(frames_to_push):
+		var sample = (randf() * 2.0 - 1.0) * vol
+		# Rapid decay for the thud effect
+		sample *= (1.0 - float(i) / frames_to_push)
+		crash_playback.push_frame(Vector2(sample, sample))
+	
+	if not crash_audio.playing:
+		crash_audio.play()
+
+func fill_motor_buffer():
+	if motor_playback == null: return
+	
+	var n = motor_playback.get_frames_available()
+	# Gentle hum range
+	var throttle = clamp(smoothed_input.x, 0.0, 1.0)
+	var freq = 60.0 + (throttle * 120.0) 
+	var volume = 0.005 + (throttle * 0.015) # Near-silent base volume
+	
+	while n > 0:
+		# Very soft layered sines
+		var sample = sin(motor_phase * TAU)
+		sample += sin(motor_phase * 2.0 * TAU) * 0.3
+		sample *= volume
+		
+		# Prevent clipping and filter out peaks
+		if not is_inf(sample) and not is_nan(sample):
+			motor_playback.push_frame(Vector2(sample, sample))
+		
+		motor_phase = fmod(motor_phase + freq / audio_hz, 1.0)
+		n -= 1
