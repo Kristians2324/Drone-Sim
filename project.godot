@@ -79,6 +79,19 @@ turn_right={
 	Object(InputEventJoypadMotion,"axis":0,"axis_value":1.0)
 ]
 }
+ui_cancel={
+"deadzone": 0.5,
+"events": [
+	Object(InputEventKey,"keycode":4194305),
+	Object(InputEventJoypadButton,"button_index":6)
+]
+}
+ui_accept={
+"deadzone": 0.5,
+"events": [
+	Object(InputEventJoypadButton,"button_index":0)
+]
+}
 
 [rendering]
 textures/vram_compression/import_etc2_astc=true

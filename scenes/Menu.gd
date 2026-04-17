@@ -1,6 +1,8 @@
 extends CanvasLayer
 
 @onready var controls_label = $Center/Panel/Margin/Layout/Controls
+@onready var resume_button = $Center/Panel/Margin/Layout/Resume
+
 var last_input_was_controller: bool = false
 
 const KEYBOARD_TEXT = "--- KEYBOARD CONTROLS ---
@@ -16,7 +18,8 @@ LS Vertical : Thrust Up/Down
 LS Horizontal : Yaw (Turn)
 RS Vertical : Pitch Forward/Back
 RS Horizontal : Roll Left/Right
-START : Toggle Camera
+START : Toggle Menu (ESC)
+A : Select Menu Option
 BACK : Restart Level"
 
 func _ready():
@@ -34,7 +37,7 @@ func _input(event):
 		if last_input_was_controller:
 			last_input_was_controller = false
 			update_controls_display()
-
+											
 func update_controls_display():
 	if controls_label:
 		controls_label.text = CONTROLLER_TEXT if last_input_was_controller else KEYBOARD_TEXT
@@ -50,6 +53,10 @@ func pause():
 	update_controls_display()
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	
+	# Enable controller navigation by focusing the first button
+	if resume_button:
+		resume_button.grab_focus()
 
 func resume():
 	hide()
