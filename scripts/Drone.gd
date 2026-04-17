@@ -1,104 +1,114 @@
 extends RigidBody3D
 
 # --- POWERFUL SMOOTH FLIGHT CONFIG ---
-const THROTTLE_POWER = 150.0   # Vertical strength
-const FORWARD_POWER = 100.0    # Directional strength (THE FIX)
-const TURN_POWER = 15.0
-const STABILIZE_FORCE = 40.0 
-const INPUT_SMOOTHING = 4.0    # Smooth but responsive
+const THROTTLE_POWER = 180.0   
+const FORWARD_POWER = 120.0    
+const TURN_POWER = 18.0
+const STABILIZE_FORCE = 45.0
+const INPUT_SMOOTHING = 3.5
 
 var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 
 # Camera toggle
-var is_first_person = false
+var is_first_person = true
 var third_person_camera: Camera3D
 var first_person_camera: Camera3D
+var xr_origin: XROrigin3D
+var xr_camera: XRCamera3D
 var camera_toggle_cooldown = 0.0
 
-@onready var label: Label
-@onready var gravity = ProjectSettings.get_setting("physics/3d/default_gravity")
 @onready var design = $Design
+@onready var collision_shape: CollisionShape3D = $Collision
 
 func _ready():
 	# Professional heavy physics for maximum stability
-	mass = 1.0
+	mass = 5.0
 	gravity_scale = 1.0
-	linear_damp = 2.5     # Prevents jitter / spastic movement
-	angular_damp = 10.0   # Buttery smooth rotations
+	linear_damp = 2.0
+	angular_damp = 8.0
 	
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 	
-	# Setup cameras
+	# Ensure collision shape is properly set on the body
+	collision_shape.shape = BoxShape3D.new()
+	collision_shape.shape.size = Vector3(1.2, 0.2, 1.2)
+	collision_shape.transform = Transform3D.IDENTITY
+	
+	# Setup standard cameras
 	third_person_camera = $SpringArm3D/Camera3D
-	
-	# Create first-person camera positioned at drone center
 	first_person_camera = Camera3D.new()
 	design.add_child(first_person_camera)
-	first_person_camera.position = Vector3(0, 0.1, 0)  # Slightly above center
+	first_person_camera.position = Vector3(0, 0.15, -0.35)
+	first_person_camera.rotation_degrees = Vector3(15, 0, 0)
 	
-	# Start with third-person camera active
-	third_person_camera.current = true
-	first_person_camera.current = false
+	# Setup VR nodes (Optional)
+	setup_vr()
 	
-	# Detailed UI Instructions
-	var canvas = CanvasLayer.new()
-	add_child(canvas)
-	label = Label.new()
-	canvas.add_child(label)
-	label.text = "ALPHASIM DRONE PRO-SIMULATOR v2.0\n" + \
-				 "--------------------------------\n" + \
-				 "W / S      : Pitch Forward / Back\n" + \
-				 "A / D      : Roll Left / Right\n" + \
-				 "Q / E      : Yaw (Rotate) Left / Right\n" + \
-				 "SPACE      : Increase Thrust (Go Up)\n" + \
-				 "SHIFT      : Decrease Thrust (Go Down)\n" + \
-				 "C          : Toggle Camera View\n" + \
-				 "T          : Toggle Day / Night Cycle\n" + \
-				 "R          : Reset Simulation\n" + \
-				 "ESC        : Quit Game"
-	label.set("theme_override_font_sizes/font_size", 20)
-	label.position = Vector2(30, 30)
+	# Initial camera state
+	update_camera_views()
+
+func setup_vr():
+	# Create VR rig at the FPV position
+	xr_origin = XROrigin3D.new()
+	design.add_child(xr_origin)
+	xr_origin.position = first_person_camera.position
+	xr_origin.rotation = first_person_camera.rotation
+	
+	xr_camera = XRCamera3D.new()
+	xr_origin.add_child(xr_camera)
+	
+	# Check if VR is actually active
+	var main = get_tree().root.find_child("Main", true, false)
+	var vr_manager = null
+	if main: vr_manager = main.get_node_or_null("VRManager")
+	
+	if vr_manager and vr_manager.has_method("is_vr_active") and vr_manager.is_vr_active():
+		print("Drone: VR Mode detected, configuring headset view.")
+		is_first_person = true # Force FPV in VR
+	else:
+		xr_origin.visible = false
+
+func update_camera_views():
+	var main = get_tree().root.find_child("Main", true, false)
+	var vr_manager = null
+	if main: vr_manager = main.get_node_or_null("VRManager")
+	var is_vr = vr_manager and vr_manager.has_method("is_vr_active") and vr_manager.is_vr_active()
+
+	if is_vr:
+		# In VR, we always use the XR Camera when in FPV
+		third_person_camera.current = false
+		first_person_camera.current = false
+		# Note: XRCamera3D doesn't need 'current = true' as much as use_xr = true handles it,
+		# but we hide the standard ones.
+	else:
+		third_person_camera.current = !is_first_person
+		first_person_camera.current = is_first_person
 
 func _physics_process(delta):
-	# 1. Inputs
+	if get_tree().paused: return
+	
+	# 1. Inputs (Works for Keyboard + Xbox natively via Action Map)
 	var target = Vector4(
 		Input.get_axis("throttle_down", "throttle_up"),
-		Input.get_axis("turn_right", "turn_left"),
+		Input.get_axis("turn_left", "turn_right"),
 		Input.get_axis("move_back", "move_forward"),
-		Input.get_axis("move_right", "move_left")
+		Input.get_axis("move_left", "move_right")
 	)
 	
-	# Full Key Fallback
-	if target.length() == 0:
-		if Input.is_key_pressed(KEY_SPACE): target.x = 1.0
-		if Input.is_key_pressed(KEY_SHIFT): target.x = -1.0
-		if Input.is_key_pressed(KEY_Q): target.y = 1.0
-		if Input.is_key_pressed(KEY_E): target.y = -1.0
-		if Input.is_key_pressed(KEY_W): target.z = 1.0
-		if Input.is_key_pressed(KEY_S): target.z = -1.0
-		if Input.is_key_pressed(KEY_A): target.w = -1.0
-		if Input.is_key_pressed(KEY_D): target.w = 1.0
-
 	smoothed_input = smoothed_input.lerp(target, delta * INPUT_SMOOTHING)
 
-	# 2. POWERFUL MOVEMENT ENGINE
-	# We combine physical local-up thrust with high-torque directional push
+	# 2. MOVEMENT
 	var local_up = global_transform.basis.y
-	
-	# Base vertical force
 	var vertical_thrust = local_up * smoothed_input.x * THROTTLE_POWER
-	
-	# Horizontal directional force (High-Torque for definite movement)
 	var forward_force = -global_transform.basis.z * smoothed_input.z * FORWARD_POWER
-	var strafe_force = -global_transform.basis.x * smoothed_input.w * FORWARD_POWER
+	var strafe_force = global_transform.basis.x * smoothed_input.w * FORWARD_POWER
 	
-	# Apply all forces
 	apply_central_force(vertical_thrust + forward_force + strafe_force)
 
 	# 3. Rotation
 	apply_torque(global_transform.basis.x * -smoothed_input.z * TURN_POWER)
-	apply_torque(global_transform.basis.z * smoothed_input.w * TURN_POWER)
-	apply_torque(global_transform.basis.y * smoothed_input.y * TURN_POWER)
+	apply_torque(global_transform.basis.z * -smoothed_input.w * TURN_POWER)
+	apply_torque(global_transform.basis.y * -smoothed_input.y * TURN_POWER)
 	
 	# 4. Stabilization
 	var up = global_transform.basis.y
@@ -106,20 +116,18 @@ func _physics_process(delta):
 	apply_torque(correction * STABILIZE_FORCE)
 	
 	# Props
-	for prop in design.get_node("Props").get_children():
+	for prop in $Design/Props.get_children():
 		prop.rotate_y(delta * 30.0)
 
 func _process(_delta):
-	# Update camera toggle cooldown
+	if get_tree().paused: return
+	
 	if camera_toggle_cooldown > 0:
 		camera_toggle_cooldown -= _delta
 	
-	# Camera toggle (with cooldown to prevent rapid toggling)
 	if Input.is_key_pressed(KEY_C) and camera_toggle_cooldown <= 0:
 		is_first_person = !is_first_person
-		third_person_camera.current = !is_first_person
-		first_person_camera.current = is_first_person
-		camera_toggle_cooldown = 0.2  # 200ms between toggles
+		update_camera_views()
+		camera_toggle_cooldown = 0.2
 	
 	if Input.is_key_pressed(KEY_R): get_tree().reload_current_scene()
-	if Input.is_key_pressed(KEY_ESCAPE): get_tree().quit()

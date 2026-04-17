@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://b2k3l4m5n6o7"]
+[gd_scene load_steps=4 format=3 uid="uid://b2k3l4m5n6o7"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Rock"]
 albedo_color = Color(0.3, 0.25, 0.2, 1)
@@ -7,6 +7,10 @@ roughness = 0.9
 [sub_resource type="CylinderMesh" id="CylinderMesh_Peak"]
 top_radius = 0.1
 bottom_radius = 50.0
+height = 60.0
+
+[sub_resource type="CylinderShape3D" id="CylinderShape3D_Peak"]
+radius = 45.0
 height = 60.0
 
 [node name="Mountain" type="StaticBody3D"]
@@ -18,4 +22,4 @@ mesh = SubResource("CylinderMesh_Peak")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 30, 0)
-shape = SubResource("CylinderMesh_Peak")
+shape = SubResource("CylinderShape3D_Peak")

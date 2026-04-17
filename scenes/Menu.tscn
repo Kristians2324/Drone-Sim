@@ -1,0 +1,87 @@
+[gd_scene load_steps=3 format=3 uid="uid://c7k8l9m0n1o2"]
+
+[ext_resource type="Script" path="res://scenes/Menu.gd" id="1_menu"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
+bg_color = Color(0.1, 0.1, 0.12, 0.94)
+corner_radius_top_left = 15
+corner_radius_top_right = 15
+corner_radius_bottom_right = 15
+corner_radius_bottom_left = 15
+shadow_size = 20
+
+[node name="Menu" type="CanvasLayer"]
+process_mode = 3
+script = ExtResource("1_menu")
+
+[node name="Dimmer" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.5)
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(450, 480)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_bg")
+
+[node name="Margin" type="MarginContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/margin_left = 30
+theme_override_constants/margin_top = 30
+theme_override_constants/margin_right = 30
+theme_override_constants/margin_bottom = 30
+
+[node name="Layout" type="VBoxContainer" parent="Center/Panel/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Title" type="Label" parent="Center/Panel/Margin/Layout"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "DRONE SIM PAUSED"
+horizontal_alignment = 1
+
+[node name="Controls" type="Label" parent="Center/Panel/Margin/Layout"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.7, 0.7, 1)
+theme_override_font_sizes/font_size = 18
+text = "--- FLIGHT CONTROLS ---
+SPACE / SHIFT : Thrust Up/Down
+W / S : Pitch Forward/Back
+A / D : Roll Left/Right
+Q / E : Yaw Rotate
+C : Switch Camera View
+R : Reset Level"
+horizontal_alignment = 1
+
+[node name="HSeparator" type="HSeparator" parent="Center/Panel/Margin/Layout"]
+layout_mode = 2
+
+[node name="Resume" type="Button" parent="Center/Panel/Margin/Layout"]
+custom_minimum_size = Vector2(0, 45)
+layout_mode = 2
+text = "RESUME FLIGHT"
+
+[node name="Restart" type="Button" parent="Center/Panel/Margin/Layout"]
+custom_minimum_size = Vector2(0, 45)
+layout_mode = 2
+text = "RESTART SIMULATION"
+
+[node name="Quit" type="Button" parent="Center/Panel/Margin/Layout"]
+custom_minimum_size = Vector2(0, 45)
+layout_mode = 2
+text = "QUIT TO DESKTOP"
+
+[connection signal="pressed" from="Center/Panel/Margin/Layout/Resume" to="." method="_on_resume_pressed"]
+[connection signal="pressed" from="Center/Panel/Margin/Layout/Restart" to="." method="_on_restart_pressed"]
+[connection signal="pressed" from="Center/Panel/Margin/Layout/Quit" to="." method="_on_quit_pressed"]

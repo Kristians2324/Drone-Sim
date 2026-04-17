@@ -1,26 +1,28 @@
 extends Node3D
 
-@onready var environment_parent = get_node("Environment")
+@onready var menu_scene = preload("res://scenes/Menu.tscn")
+var menu_instance: CanvasLayer
+var vr_manager: Node
 
-var day_scene = preload("res://scenes/Environment.tscn")
-var night_scene = preload("res://scenes/Environment_Night.tscn")
-var is_night = false
+func _ready():
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	
+	# Initial VR Setup
+	vr_manager = load("res://scripts/VRManager.gd").new()
+	vr_manager.name = "VRManager"
+	add_child(vr_manager)
+	
+	# Instantiate menu once at startup
+	menu_instance = menu_scene.instantiate()
+	add_child(menu_instance)
+	menu_instance.hide()
 
 func _input(event):
-	if event.is_action_pressed("toggle_environment") or (event is InputEventKey and event.pressed and event.keycode == KEY_T):
-		toggle_world()
-
-func toggle_world():
-	is_night = !is_night
-	
-	# Find current environment node
-	var current_env = get_tree().root.find_child("Environment*", true, false)
-	if current_env:
-		var parent = current_env.get_parent()
-		var new_scene = night_scene if is_night else day_scene
-		var new_env = new_scene.instantiate()
-		
-		parent.add_child(new_env)
-		current_env.queue_free()
-		
-		print("Environment toggled to: ", "Night" if is_night else "Day")
+	# Listen for ESC key globally
+	if event.is_action_pressed("ui_cancel") or (event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE):
+		if menu_instance:
+			if menu_instance.visible:
+				menu_instance.resume()
+			else:
+				menu_instance.pause()
+			get_viewport().set_input_as_handled()

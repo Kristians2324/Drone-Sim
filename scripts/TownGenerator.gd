@@ -28,6 +28,7 @@ func generate_town():
 			# Add a "lot" (dirt patch)
 			var lot = CSGBox3D.new()
 			lot.size = Vector3(spacing * 0.8, 0.1, spacing * 0.8)
+			lot.use_collision = true
 			lot.position = house.position - Vector3(0, 0.05, 0)
 			var mat = StandardMaterial3D.new()
 			mat.albedo_color = Color(0.3, 0.25, 0.2)
