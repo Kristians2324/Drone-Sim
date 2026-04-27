@@ -2,11 +2,12 @@
 
 [ext_resource type="Script" uid="uid://bblgsci53sppu" path="res://scripts/Drone.gd" id="1_rvslj"]
 [ext_resource type="PackedScene" uid="uid://b8k1m7d5j5q6n" path="res://scenes/Environment.tscn" id="3_env"]
-[ext_resource type="PackedScene" uid="uid://d1k3f4g5h6j7" path="res://scenes/Terrain.tscn" id="4_ter"]
 [ext_resource type="Script" uid="uid://c5sikpkaigoxw" path="res://scripts/WorldManager.gd" id="5_wm"]
-[ext_resource type="PackedScene" uid="uid://b2k3l4m5n6o7" path="res://scenes/Mountain.tscn" id="6_mtn"]
-[ext_resource type="Script" uid="uid://c1ishtt5uljad" path="res://scripts/WorldDetailManager.gd" id="7_wdm"]
-[ext_resource type="Script" uid="uid://8tanx2fyhn25" path="res://scripts/TownGenerator.gd" id="9_twn"]
+[ext_resource type="Script" path="res://scripts/HealthCheck.gd" id="6_hc"]
+[ext_resource type="PackedScene" uid="uid://d1k3f4g5h6j7" path="res://scenes/Terrain.tscn" id="6_terrain"]
+[ext_resource type="PackedScene" uid="uid://b2k3l4m5n6o7" path="res://scenes/Mountain.tscn" id="7_mtn"]
+[ext_resource type="Script" uid="uid://c6lka6p8q7r1s" path="res://scripts/TownGenerator.gd" id="8_town"]
+[ext_resource type="PackedScene" uid="uid://br1evmd5douej" path="res://foosTable.gltf" id="9_foos"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_DroneBody"]
 albedo_color = Color(0.15, 0.15, 0.2, 1)
@@ -40,12 +41,26 @@ size = Vector3(1.2, 0.2, 1.2)
 [node name="Main" type="Node3D" unique_id=383992290]
 script = ExtResource("5_wm")
 
+[node name="Terrain" parent="." unique_id=1740151436 instance=ExtResource("6_terrain")]
+
+[node name="Mountains" type="Node3D" parent="."]
+
+[node name="Mountain1" parent="Mountains" instance=ExtResource("7_mtn")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 300, 0, -200)
+
+[node name="Mountain2" parent="Mountains" instance=ExtResource("7_mtn")]
+transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, -400, 0, -500)
+
+[node name="Town" type="Node3D" parent="."]
+script = ExtResource("8_town")
+
 [node name="Environment" parent="." unique_id=1053846627 instance=ExtResource("3_env")]
 
-[node name="Terrain" parent="." unique_id=244573142 instance=ExtResource("4_ter")]
+[node name="FoosballTable" parent="." unique_id=272009188 instance=ExtResource("9_foos")]
+transform = Transform3D(4.961357, 0, -0.620432, 0, 5, 0, 0.620432, 0, 4.961357, 50, 0, 50)
 
 [node name="Drone" type="RigidBody3D" parent="." unique_id=494787589]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 0)
 linear_damp = 0.5
 angular_damp = 6.0
 script = ExtResource("1_rvslj")
@@ -97,21 +112,3 @@ spring_length = 4.0
 
 [node name="Camera3D" type="Camera3D" parent="Drone/SpringArm3D" unique_id=444309196]
 current = true
-
-[node name="Mountains" type="Node3D" parent="." unique_id=73596002]
-
-[node name="Mountain1" parent="Mountains" unique_id=880629804 instance=ExtResource("6_mtn")]
-transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 220, -10, -350)
-
-[node name="Mountain2" parent="Mountains" unique_id=145089661 instance=ExtResource("6_mtn")]
-transform = Transform3D(3, 0, 0, 0, 3, 0, 0, 0, 3, -400, -20, -150)
-
-[node name="WorldDetail" type="Node3D" parent="." unique_id=412141597]
-script = ExtResource("7_wdm")
-tree_count = 300
-rock_count = 150
-
-[node name="Town" type="Node3D" parent="." unique_id=1236871113]
-script = ExtResource("9_twn")
-grid_size = 10
-spacing = 20.0

@@ -28,6 +28,9 @@ var motor_phase = 0.0
 @onready var design = $Design
 @onready var collision_shape: CollisionShape3D = $Collision
 
+var drone_model: Node3D
+var propellers: Array[Node3D] = []
+
 func _ready():
 	# Professional heavy physics for maximum stability
 	mass = 5.0
@@ -62,6 +65,131 @@ func _ready():
 	
 	# Setup procedural audio
 	setup_drone_audio()
+	
+	# Replace model with Drone.gltf
+	replace_drone_model()
+
+func replace_drone_model():
+	print("Drone: Starting model replacement...")
+	# 1. Hide/Remove old procedural parts
+	for child in design.get_children():
+		if not child is Camera3D and not child is XROrigin3D:
+			child.queue_free()
+	
+	# 2. Load and instance the new model
+	if not FileAccess.file_exists("res://Drone.gltf"):
+		push_error("Drone: Drone.gltf NOT FOUND in res://")
+		return
+		
+	var model_scene = load("res://Drone.gltf")
+	if model_scene:
+		drone_model = model_scene.instantiate()
+		design.add_child(drone_model)
+		design.visible = true
+		
+		# 3. Handle Spline's massive offset and scale
+		# We'll group the model under a wrapper to center it
+		var model_aabb = _center_spline_model(drone_model)
+		
+		# Auto-scale to a reasonable 3.5m wingspan
+		var max_dim = max(model_aabb.size.x, model_aabb.size.z)
+		if max_dim > 0:
+			var target_scale = 3.5 / max_dim 
+			drone_model.scale = Vector3(target_scale, target_scale, target_scale)
+			print("Drone: Applied reasonable scale: ", target_scale)
+		else:
+			drone_model.scale = Vector3(2.5, 2.5, 2.5)
+			
+		# Shrink the "square in the middle" (usually named Cube in Spline)
+		var central_cube = drone_model.find_child("Cube*", true, false)
+		if not central_cube: central_cube = drone_model.find_child("*Cube*", true, false)
+		if central_cube:
+			central_cube.scale *= 0.4 # Make the body block much smaller
+			print("Drone: Shrunk central body node: ", central_cube.name)
+			
+		drone_model.rotation_degrees.y = 180 # Face forward
+		
+		# 4. Find propellers
+		propellers.clear()
+		_find_propellers(drone_model)
+		print("Drone: Model loaded successfully. Found ", propellers.size(), " propellers.")
+		
+		if propellers.size() == 0:
+			print("Drone: No propellers found by name, attempting fallback by height...")
+			_find_propellers_fallback(drone_model)
+			print("Drone: Fallback found ", propellers.size(), " potential propellers.")
+
+	else:
+		push_error("Drone: Failed to load Drone.gltf as a scene.")
+
+func _center_spline_model(model: Node3D) -> AABB:
+	# Spline exports often have huge world-space offsets and deep hierarchies.
+	# We find all meshes in the subtree to calculate the true center.
+	var meshes: Array[MeshInstance3D] = []
+	_get_all_meshes(model, meshes)
+	
+	var aabb = AABB()
+	var first = true
+	
+	for mesh in meshes:
+		# Get the mesh transform relative to the 'model' root
+		var mesh_transform = model.global_transform.affine_inverse() * mesh.global_transform
+		# Transform the local AABB into the model's local space
+		var mesh_aabb = mesh_transform * mesh.get_aabb()
+		
+		if first:
+			aabb = mesh_aabb
+			first = false
+		else:
+			aabb = aabb.merge(mesh_aabb)
+	
+	if not first:
+		var center = aabb.get_center()
+		# Offset the top-most wrapper nodes so they align with our physics body
+		for child in model.get_children():
+			if child is Node3D:
+				child.position -= center
+		print("Drone: Auto-centered Spline model. Offset by: ", -center)
+		
+		# Return the AABB relative to the center
+		aabb.position -= center
+		return aabb
+		
+	return AABB()
+
+func _get_all_meshes(node: Node, meshes: Array[MeshInstance3D]):
+	if node is MeshInstance3D:
+		meshes.append(node)
+	for child in node.get_children():
+		_get_all_meshes(child, meshes)
+
+func _find_propellers_fallback(node):
+	# In Spline exports, propellers are often just "Cylinder" nodes
+	# We look for MeshInstances that are thin cylinders or high up
+	if node is MeshInstance3D:
+		var name_lower = node.name.to_lower()
+		if "cylinder" in name_lower:
+			# Check if it's likely a propeller (usually higher than the body)
+			# or if it has many of them. For now, we'll take all cylinders 
+			# except the one that might be the main body.
+			propellers.append(node)
+	
+	for child in node.get_children():
+		_find_propellers_fallback(child)
+
+func _find_propellers(node):
+	# Look for nodes containing "Prop", "Blade", "Rotor", "Helix", "Fan"
+	var name_lower = node.name.to_lower()
+	var is_prop = "prop" in name_lower or "blade" in name_lower or "rotor" in name_lower or "helix" in name_lower or "fan" in name_lower
+	
+	if is_prop and node is Node3D:
+		propellers.append(node)
+		# If we found a propeller group, we might not need to search its children 
+		# for more propellers (to avoid double rotation), but we'll keep searching 
+		# just in case the meshes are separate.
+	
+	for child in node.get_children():
+		_find_propellers(child)
 
 func setup_vr():
 	# Create VR rig at the FPV position
@@ -135,8 +263,15 @@ func _physics_process(delta):
 	apply_torque(correction * STABILIZE_FORCE)
 	
 	# Props
-	for prop in $Design/Props.get_children():
-		prop.rotate_y(delta * 30.0)
+	var prop_speed = 30.0 + (smoothed_input.x * 60.0)
+	for prop in propellers:
+		prop.rotate_y(delta * prop_speed)
+	
+	# Legacy props (if any left)
+	var legacy_props = design.get_node_or_null("Props")
+	if legacy_props:
+		for prop in legacy_props.get_children():
+			prop.rotate_y(delta * prop_speed)
 
 func _process(_delta):
 	if get_tree().paused: return
@@ -169,6 +304,7 @@ func setup_drone_audio():
 	crash_gen.buffer_length = 0.05
 	crash_audio.stream = crash_gen
 	add_child(crash_audio)
+	crash_audio.play()
 	crash_playback = crash_audio.get_stream_playback()
 
 func _on_drone_collision(_body):
