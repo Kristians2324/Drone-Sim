@@ -41,24 +41,6 @@ size = Vector3(1.2, 0.2, 1.2)
 [node name="Main" type="Node3D" unique_id=383992290]
 script = ExtResource("5_wm")
 
-[node name="Terrain" parent="." unique_id=1740151436 instance=ExtResource("6_terrain")]
-
-[node name="Mountains" type="Node3D" parent="."]
-
-[node name="Mountain1" parent="Mountains" instance=ExtResource("7_mtn")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 300, 0, -200)
-
-[node name="Mountain2" parent="Mountains" instance=ExtResource("7_mtn")]
-transform = Transform3D(1.5, 0, 0, 0, 1.5, 0, 0, 0, 1.5, -400, 0, -500)
-
-[node name="Town" type="Node3D" parent="."]
-script = ExtResource("8_town")
-
-[node name="Environment" parent="." unique_id=1053846627 instance=ExtResource("3_env")]
-
-[node name="FoosballTable" parent="." unique_id=272009188 instance=ExtResource("9_foos")]
-transform = Transform3D(4.961357, 0, -0.620432, 0, 5, 0, 0.620432, 0, 4.961357, 50, 0, 50)
-
 [node name="Drone" type="RigidBody3D" parent="." unique_id=494787589]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 5, 0)
 linear_damp = 0.5

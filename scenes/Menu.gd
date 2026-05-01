@@ -11,7 +11,8 @@ W / S : Pitch Forward/Back
 A / D : Roll Left/Right
 Q / E : Yaw Rotate
 C : Switch Camera View
-R : Reset Level"
+R : Reset Level
+1-4 : Switch Environments"
 
 const CONTROLLER_TEXT = "--- XBOX CONTROLLER ---
 LS Vertical : Thrust Up/Down
