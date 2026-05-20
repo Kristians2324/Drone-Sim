@@ -9,6 +9,47 @@ const INPUT_SMOOTHING = 3.5
 
 var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 
+# Autopilot & Tricks configuration
+enum FlightState { MANUAL, AUTOPILOT, TRICK_LOOP, TRICK_BARREL }
+var flight_state = FlightState.MANUAL
+var state_toggle_cooldown = 0.0
+
+var autopilot_waypoints: Array[Vector3] = [
+	Vector3(0, 15, 0),
+	Vector3(120, 25, -120),
+	Vector3(250, 45, -50),   # High altitude, trigger loop-de-loop
+	Vector3(150, 30, 150),
+	Vector3(-100, 25, 200),  # Mid altitude, trigger barrel roll
+	Vector3(-250, 35, 50),
+	Vector3(-150, 20, -150)
+]
+var current_waypoint_index = 0
+var autopilot_speed = 22.0
+var waypoint_reach_distance = 12.0
+
+# Trick variables
+var trick_time = 0.0
+const LOOP_DURATION = 2.2
+var loop_start_pos = Vector3.ZERO
+var loop_center = Vector3.ZERO
+var loop_forward = Vector3.ZERO
+var loop_up = Vector3.ZERO
+var loop_radius = 20.0
+
+const BARREL_DURATION = 1.2
+var barrel_start_pos = Vector3.ZERO
+var barrel_forward = Vector3.ZERO
+var barrel_left = Vector3.ZERO
+var barrel_up = Vector3.ZERO
+var barrel_start_basis = Basis.IDENTITY
+var barrel_speed = 20.0
+var barrel_radius = 2.0
+
+var post_trick_state = FlightState.MANUAL
+
+# Swarm variables
+var boids_manager: Node3D = null
+
 # Camera toggle
 var is_first_person = true
 var third_person_camera: Camera3D
@@ -66,8 +107,14 @@ func _ready():
 	# Setup procedural audio
 	setup_drone_audio()
 	
-	# Replace model with Drone.gltf
-	replace_drone_model()
+	# Find and initialize propellers from the built-in Godot scene model
+	propellers.clear()
+	var props_node = design.get_node_or_null("Props")
+	if props_node:
+		for prop in props_node.get_children():
+			if prop is Node3D:
+				propellers.append(prop)
+		print("Drone: Found ", propellers.size(), " procedural propellers in the Godot model.")
 
 func replace_drone_model():
 	print("Drone: Starting model replacement...")
@@ -231,6 +278,20 @@ func update_camera_views():
 func _physics_process(delta):
 	if get_tree().paused: return
 	
+	# Fill audio buffer (needs smoothed_input.x, which is set in state processors)
+	fill_motor_buffer()
+	
+	match flight_state:
+		FlightState.MANUAL:
+			process_manual_flight(delta)
+		FlightState.AUTOPILOT:
+			process_autopilot_flight(delta)
+		FlightState.TRICK_LOOP:
+			process_trick_loop(delta)
+		FlightState.TRICK_BARREL:
+			process_trick_barrel(delta)
+
+func process_manual_flight(delta):
 	# 1. Inputs (Works for Keyboard + Xbox natively via Action Map)
 	var target = Vector4(
 		Input.get_axis("throttle_down", "throttle_up"),
@@ -240,9 +301,6 @@ func _physics_process(delta):
 	)
 	
 	smoothed_input = smoothed_input.lerp(target, delta * INPUT_SMOOTHING)
-
-	# Fill audio buffer
-	fill_motor_buffer()
 
 	# 2. MOVEMENT
 	var local_up = global_transform.basis.y
@@ -273,11 +331,190 @@ func _physics_process(delta):
 		for prop in legacy_props.get_children():
 			prop.rotate_y(delta * prop_speed)
 
+func process_autopilot_flight(delta):
+	# 1. Waypoint target matching
+	var target_pos = autopilot_waypoints[current_waypoint_index]
+	var dist_to_target = global_position.distance_to(target_pos)
+	
+	if dist_to_target < waypoint_reach_distance:
+		# Trigger tricks at specific waypoints on the track
+		if current_waypoint_index == 2: # High altitude loop
+			start_trick_loop(false)
+			current_waypoint_index = (current_waypoint_index + 1) % autopilot_waypoints.size()
+			return
+		elif current_waypoint_index == 4: # Mid altitude barrel roll
+			start_trick_barrel(false)
+			current_waypoint_index = (current_waypoint_index + 1) % autopilot_waypoints.size()
+			return
+		else:
+			current_waypoint_index = (current_waypoint_index + 1) % autopilot_waypoints.size()
+			target_pos = autopilot_waypoints[current_waypoint_index]
+			
+	# 2. Steer velocity towards the target waypoint
+	var desired_dir = (target_pos - global_position).normalized()
+	var target_velocity = desired_dir * autopilot_speed
+	linear_velocity = linear_velocity.lerp(target_velocity, delta * 3.0)
+	
+	# 3. Orient the drone realistically
+	# Forward direction along velocity
+	var fwd = -linear_velocity.normalized()
+	if fwd.is_zero_approx():
+		fwd = -global_transform.basis.z
+		
+	var left = Vector3.UP.cross(fwd).normalized()
+	if left.is_zero_approx():
+		left = global_transform.basis.x
+		
+	var up = fwd.cross(left).normalized()
+	
+	# Banking/rolling into turns
+	var current_fwd = -global_transform.basis.z
+	var yaw_cross = current_fwd.cross(desired_dir)
+	var turn_amount = yaw_cross.dot(Vector3.UP) # Positive: turn left, Negative: turn right
+	
+	# Max roll of ~35 degrees
+	var target_roll = -turn_amount * 0.8
+	target_roll = clamp(target_roll, -0.6, 0.6)
+	
+	# Slight pitch down during autopilot flight to signify forward thrust
+	var target_pitch = -0.15
+	
+	# Build the target basis
+	var target_basis = Basis(left, up, fwd)
+	target_basis = target_basis.rotated(target_basis.z, target_roll)
+	target_basis = target_basis.rotated(target_basis.x, target_pitch)
+	
+	# Slerp orientation
+	global_transform.basis = global_transform.basis.slerp(target_basis.orthonormalized(), delta * 4.0)
+	
+	# Constant throttle values for propellers/motor sound
+	smoothed_input.x = 0.6
+	
+	# Propellers
+	var prop_speed = 30.0 + (smoothed_input.x * 60.0)
+	for prop in propellers:
+		prop.rotate_y(delta * prop_speed)
+	
+	var legacy_props = design.get_node_or_null("Props")
+	if legacy_props:
+		for prop in legacy_props.get_children():
+			prop.rotate_y(delta * prop_speed)
+
+func start_trick_loop(from_manual = false):
+	flight_state = FlightState.TRICK_LOOP
+	post_trick_state = FlightState.MANUAL if from_manual else FlightState.AUTOPILOT
+	trick_time = 0.0
+	loop_start_pos = global_position
+	loop_forward = -global_transform.basis.z
+	loop_up = global_transform.basis.y
+	loop_center = loop_start_pos + loop_up * loop_radius
+	print("Drone: Starting Loop-de-loop trick!")
+
+func process_trick_loop(delta):
+	trick_time += delta
+	if trick_time >= LOOP_DURATION:
+		flight_state = post_trick_state
+		linear_velocity = loop_forward * autopilot_speed
+		angular_velocity = Vector3.ZERO
+		print("Drone: Loop-de-loop trick finished!")
+		return
+		
+	var progress = trick_time / LOOP_DURATION
+	var theta = -PI/2.0 + progress * TAU
+	
+	var target_pos = loop_center + loop_radius * cos(theta) * loop_forward + loop_radius * sin(theta) * loop_up
+	
+	# Forward tangent vector
+	var tangent_fwd = -sin(theta) * loop_forward + cos(theta) * loop_up
+	var new_forward = -tangent_fwd.normalized()
+	
+	# Upward vector pointing outward
+	var new_up = (-cos(theta) * loop_forward - sin(theta) * loop_up).normalized()
+	var new_left = new_up.cross(new_forward).normalized()
+	
+	global_position = target_pos
+	global_transform.basis = Basis(new_left, new_up, new_forward).orthonormalized()
+	
+	# Update velocities for physical accuracy during the trick
+	linear_velocity = tangent_fwd.normalized() * (2.0 * PI * loop_radius / LOOP_DURATION)
+	angular_velocity = new_left * (2.0 * PI / LOOP_DURATION)
+	
+	# Simulate loop throttle sound
+	smoothed_input.x = 0.95
+	
+	var prop_speed = 30.0 + (smoothed_input.x * 60.0)
+	for prop in propellers:
+		prop.rotate_y(delta * prop_speed)
+
+func start_trick_barrel(from_manual = false):
+	flight_state = FlightState.TRICK_BARREL
+	post_trick_state = FlightState.MANUAL if from_manual else FlightState.AUTOPILOT
+	trick_time = 0.0
+	barrel_start_pos = global_position
+	barrel_forward = -global_transform.basis.z
+	barrel_left = global_transform.basis.x
+	barrel_up = global_transform.basis.y
+	barrel_start_basis = global_transform.basis
+	print("Drone: Starting Barrel Roll trick!")
+
+func process_trick_barrel(delta):
+	trick_time += delta
+	if trick_time >= BARREL_DURATION:
+		flight_state = post_trick_state
+		linear_velocity = barrel_forward * autopilot_speed
+		angular_velocity = Vector3.ZERO
+		print("Drone: Barrel Roll trick finished!")
+		return
+		
+	var progress = trick_time / BARREL_DURATION
+	var phi = progress * TAU
+	
+	# Helical position curve
+	var displacement = barrel_forward * barrel_speed * trick_time + barrel_left * barrel_radius * sin(phi) + barrel_up * barrel_radius * (1.0 - cos(phi))
+	global_position = barrel_start_pos + displacement
+	
+	# Roll around the barrel_forward vector
+	var rolled_basis = barrel_start_basis.rotated(barrel_forward, phi)
+	global_transform.basis = rolled_basis.orthonormalized()
+	
+	# Update velocities for physical accuracy during the trick
+	linear_velocity = barrel_forward * barrel_speed + barrel_left * barrel_radius * (2.0 * PI / BARREL_DURATION) * cos(phi) + barrel_up * barrel_radius * (2.0 * PI / BARREL_DURATION) * sin(phi)
+	angular_velocity = barrel_forward * (2.0 * PI / BARREL_DURATION)
+	
+	# Simulate roll throttle sound
+	smoothed_input.x = 0.85
+	
+	var prop_speed = 30.0 + (smoothed_input.x * 60.0)
+	for prop in propellers:
+		prop.rotate_y(delta * prop_speed)
+
+func toggle_boids_swarm():
+	if boids_manager:
+		print("Drone: Disabling Boids Swarm.")
+		boids_manager.queue_free()
+		boids_manager = null
+	else:
+		print("Drone: Enabling Boids Swarm!")
+		var boid_mgr_script = load("res://scripts/BoidManager.gd")
+		if not boid_mgr_script:
+			push_error("Drone: BoidManager.gd script not found.")
+			return
+		boids_manager = Node3D.new()
+		boids_manager.set_script(boid_mgr_script)
+		get_parent().add_child(boids_manager)
+		boids_manager.initialize(self)
+
+func get_propeller_count() -> int:
+	return propellers.size()
+
 func _process(_delta):
 	if get_tree().paused: return
 	
 	if camera_toggle_cooldown > 0:
 		camera_toggle_cooldown -= _delta
+		
+	if state_toggle_cooldown > 0:
+		state_toggle_cooldown -= _delta
 	
 	if Input.is_key_pressed(KEY_C) and camera_toggle_cooldown <= 0:
 		is_first_person = !is_first_person
@@ -285,6 +522,40 @@ func _process(_delta):
 		camera_toggle_cooldown = 0.2
 	
 	if Input.is_key_pressed(KEY_R): get_tree().reload_current_scene()
+	
+	# Key 5: Toggle Autopilot (Track Flight)
+	if Input.is_key_pressed(KEY_5) and state_toggle_cooldown <= 0:
+		state_toggle_cooldown = 0.3
+		if flight_state == FlightState.AUTOPILOT:
+			flight_state = FlightState.MANUAL
+			print("Drone: Autopilot disabled. Returning to manual control.")
+		else:
+			flight_state = FlightState.AUTOPILOT
+			# Find nearest waypoint to start from
+			var nearest_idx = 0
+			var nearest_dist = 999999.0
+			for i in range(autopilot_waypoints.size()):
+				var d = global_position.distance_to(autopilot_waypoints[i])
+				if d < nearest_dist:
+					nearest_dist = d
+					nearest_idx = i
+			current_waypoint_index = nearest_idx
+			print("Drone: Autopilot enabled! Heading to waypoint: ", nearest_idx)
+			
+	# Key 6: Perform Loop-de-loop
+	if Input.is_key_pressed(KEY_6) and state_toggle_cooldown <= 0:
+		state_toggle_cooldown = 0.3
+		start_trick_loop(flight_state == FlightState.MANUAL)
+		
+	# Key 7: Perform Barrel Roll
+	if Input.is_key_pressed(KEY_7) and state_toggle_cooldown <= 0:
+		state_toggle_cooldown = 0.3
+		start_trick_barrel(flight_state == FlightState.MANUAL)
+		
+	# Key 8: Toggle Swarm (Boids Mode)
+	if Input.is_key_pressed(KEY_8) and state_toggle_cooldown <= 0:
+		state_toggle_cooldown = 0.3
+		toggle_boids_swarm()
 
 func setup_drone_audio():
 	# 1. Continuous Motor Sound
