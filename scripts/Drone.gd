@@ -331,9 +331,29 @@ func process_manual_flight(delta):
 		for prop in legacy_props.get_children():
 			prop.rotate_y(delta * prop_speed)
 
+func get_terrain_height_at(pos: Vector3) -> float:
+	var space_state = get_world_3d().direct_space_state
+	if not space_state:
+		return 0.0
+	var from = Vector3(pos.x, 300.0, pos.z)
+	var to = Vector3(pos.x, -50.0, pos.z)
+	var query = PhysicsRayQueryParameters3D.create(from, to)
+	query.exclude = [get_rid()]
+	var result = space_state.intersect_ray(query)
+	if result.has("position"):
+		return result.position.y
+	return 0.0
+
 func process_autopilot_flight(delta):
 	# 1. Waypoint target matching
 	var target_pos = autopilot_waypoints[current_waypoint_index]
+	
+	# Dynamically ensure the waypoint's base target height clears the terrain below it
+	var base_terrain_height = get_terrain_height_at(target_pos)
+	var waypoint_min_clearance = 15.0
+	if target_pos.y < base_terrain_height + waypoint_min_clearance:
+		target_pos.y = base_terrain_height + waypoint_min_clearance
+		
 	var dist_to_target = global_position.distance_to(target_pos)
 	
 	if dist_to_target < waypoint_reach_distance:
@@ -349,9 +369,38 @@ func process_autopilot_flight(delta):
 		else:
 			current_waypoint_index = (current_waypoint_index + 1) % autopilot_waypoints.size()
 			target_pos = autopilot_waypoints[current_waypoint_index]
+			# Adjust the new target waypoint too
+			var new_base_terrain = get_terrain_height_at(target_pos)
+			if target_pos.y < new_base_terrain + waypoint_min_clearance:
+				target_pos.y = new_base_terrain + waypoint_min_clearance
 			
-	# 2. Steer velocity towards the target waypoint
+	# 2. Steer velocity towards the target waypoint, with real-time terrain contouring
 	var desired_dir = (target_pos - global_position).normalized()
+	
+	# Look ahead to detect upcoming hills or mountains in our path
+	var look_ahead_dist = 15.0
+	var forward_dir = linear_velocity.normalized()
+	if forward_dir.is_zero_approx():
+		forward_dir = -global_transform.basis.z
+		
+	var check_pos = global_position + forward_dir * look_ahead_dist
+	var terrain_height_ahead = get_terrain_height_at(check_pos)
+	var terrain_height_below = get_terrain_height_at(global_position)
+	
+	# Safe target altitude for the drone at its current horizontal position
+	var flight_min_clearance = 12.0
+	var safe_y = max(terrain_height_below + flight_min_clearance, terrain_height_ahead + flight_min_clearance)
+	
+	# Ensure the flight target is adjusted up if terrain demands it
+	var adjusted_target_pos = target_pos
+	if adjusted_target_pos.y < safe_y:
+		adjusted_target_pos.y = safe_y
+		
+	# If the drone itself has fallen below safe altitude, apply an extra climbing boost
+	if global_position.y < safe_y:
+		adjusted_target_pos.y = max(adjusted_target_pos.y, safe_y + 8.0)
+		
+	desired_dir = (adjusted_target_pos - global_position).normalized()
 	var target_velocity = desired_dir * autopilot_speed
 	linear_velocity = linear_velocity.lerp(target_velocity, delta * 3.0)
 	

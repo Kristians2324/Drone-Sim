@@ -10,13 +10,35 @@ class_name BoidManager
 @export var separation_weight: float = 2.2
 @export var alignment_weight: float = 0.8
 @export var target_weight: float = 2.5
-@export var ground_avoid_weight: float = 4.0
+@export var target_separation_weight: float = 3.5
+@export var ground_avoid_weight: float = 5.0
+
+@export var target_arrival_radius: float = 15.0
+@export var target_separation_radius: float = 6.0
 
 @export var max_speed: float = 20.0
 @export var max_force: float = 12.0
 
 var boids: Array[Boid] = []
 var target_node: Node3D = null
+
+func get_terrain_height_at(pos: Vector3) -> float:
+	var space_state = get_world_3d().direct_space_state
+	if not space_state:
+		return 0.0
+	# Raycast from high up straight down
+	var from = Vector3(pos.x, 300.0, pos.z)
+	var to = Vector3(pos.x, -50.0, pos.z)
+	var query = PhysicsRayQueryParameters3D.create(from, to)
+	
+	# Exclude target player drone
+	if target_node:
+		query.exclude = [target_node.get_rid()]
+		
+	var result = space_state.intersect_ray(query)
+	if result.has("position"):
+		return result.position.y
+	return 0.0
 
 func initialize(target: Node3D):
 	target_node = target
@@ -134,15 +156,32 @@ func _physics_process(delta):
 			var desired = steer_separation.normalized() * max_speed
 			steer_separation = (desired - vel).limit_length(max_force)
 			
-		# Target Seeking (Seek player drone)
-		var desired_target = (target_pos - pos).normalized() * max_speed
-		var steer_target = (desired_target - vel).limit_length(max_force)
-		
-		# Ground Avoidance (Stay above terrain)
+		# Target Seeking (Seek player drone with Arrival behavior)
+		var dist_to_target = pos.distance_to(target_pos)
+		var steer_target = Vector3.ZERO
+		if dist_to_target > 0.001:
+			var speed = max_speed
+			if dist_to_target < target_arrival_radius:
+				speed = max_speed * (dist_to_target / target_arrival_radius)
+			var desired_target = (target_pos - pos).normalized() * speed
+			steer_target = (desired_target - vel).limit_length(max_force)
+			
+		# Separation from the player/target drone to avoid collision
+		var steer_target_separation = Vector3.ZERO
+		if dist_to_target < target_separation_radius and dist_to_target > 0.001:
+			var diff = (pos - target_pos).normalized() / dist_to_target
+			var desired = diff * max_speed
+			steer_target_separation = (desired - vel).limit_length(max_force)
+			
+		# Ground Avoidance (Stay above terrain dynamically using raycast query)
 		var steer_ground = Vector3.ZERO
-		if pos.y < 3.0:
+		var terrain_height = get_terrain_height_at(pos)
+		var min_height_above_ground = 7.0
+		if pos.y < terrain_height + min_height_above_ground:
 			var desired_up = Vector3(vel.x, max_speed, vel.z).normalized() * max_speed
-			steer_ground = (desired_up - vel).limit_length(max_force * 2.0)
+			var correction_depth = (terrain_height + min_height_above_ground) - pos.y
+			var scale_factor = clamp(1.0 + (correction_depth / 2.0), 1.0, 3.0)
+			steer_ground = (desired_up - vel).limit_length(max_force * scale_factor)
 			
 		# Sum of steering forces
 		var total_force = (
@@ -150,6 +189,7 @@ func _physics_process(delta):
 			steer_separation * separation_weight +
 			steer_alignment * alignment_weight +
 			steer_target * target_weight +
+			steer_target_separation * target_separation_weight +
 			steer_ground * ground_avoid_weight
 		)
 		
