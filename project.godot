@@ -18,6 +18,10 @@ config/name="AlphaSim Drone Simulator"
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.6")
 
+[display]
+
+window/size/mode=3
+
 [editor_plugins]
 
 enabled=PackedStringArray()

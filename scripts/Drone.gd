@@ -6,6 +6,10 @@ const FORWARD_POWER = 120.0
 const TURN_POWER = 18.0
 const STABILIZE_FORCE = 45.0
 const INPUT_SMOOTHING = 3.5
+const HOVER_MIN_CLEARANCE = 2.0
+const HOVER_HOLD_FORCE = 55.0
+const HOVER_HOLD_DAMPING = 12.0
+const HOVER_MAX_HOLD_FORCE = 90.0
 
 var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 
@@ -71,6 +75,9 @@ var motor_phase = 0.0
 
 var drone_model: Node3D
 var propellers: Array[Node3D] = []
+var show_rig: DroneShowLightRig
+
+var hover_enabled = false
 
 func _ready():
 	# Professional heavy physics for maximum stability
@@ -116,11 +123,17 @@ func _ready():
 				propellers.append(prop)
 		print("Drone: Found ", propellers.size(), " procedural propellers in the Godot model.")
 
+	setup_show_lights()
+
+	apply_hover_mode()
+
 func replace_drone_model():
 	print("Drone: Starting model replacement...")
 	# 1. Hide/Remove old procedural parts
 	for child in design.get_children():
 		if not child is Camera3D and not child is XROrigin3D:
+			if child == show_rig:
+				show_rig = null
 			child.queue_free()
 	
 	# 2. Load and instance the new model
@@ -128,7 +141,7 @@ func replace_drone_model():
 		push_error("Drone: Drone.gltf NOT FOUND in res://")
 		return
 		
-	var model_scene = load("res://Drone.gltf")
+	var model_scene: PackedScene = load("res://Drone.gltf")
 	if model_scene:
 		drone_model = model_scene.instantiate()
 		design.add_child(drone_model)
@@ -136,10 +149,10 @@ func replace_drone_model():
 		
 		# 3. Handle Spline's massive offset and scale
 		# We'll group the model under a wrapper to center it
-		var model_aabb = _center_spline_model(drone_model)
+		var model_aabb: AABB = _center_spline_model(drone_model)
 		
 		# Auto-scale to a reasonable 3.5m wingspan
-		var max_dim = max(model_aabb.size.x, model_aabb.size.z)
+		var max_dim: float = max(model_aabb.size.x, model_aabb.size.z)
 		if max_dim > 0:
 			var target_scale = 3.5 / max_dim 
 			drone_model.scale = Vector3(target_scale, target_scale, target_scale)
@@ -148,7 +161,7 @@ func replace_drone_model():
 			drone_model.scale = Vector3(2.5, 2.5, 2.5)
 			
 		# Shrink the "square in the middle" (usually named Cube in Spline)
-		var central_cube = drone_model.find_child("Cube*", true, false)
+		var central_cube: Node = drone_model.find_child("Cube*", true, false)
 		if not central_cube: central_cube = drone_model.find_child("*Cube*", true, false)
 		if central_cube:
 			central_cube.scale *= 0.4 # Make the body block much smaller
@@ -160,11 +173,13 @@ func replace_drone_model():
 		propellers.clear()
 		_find_propellers(drone_model)
 		print("Drone: Model loaded successfully. Found ", propellers.size(), " propellers.")
-		
+
 		if propellers.size() == 0:
 			print("Drone: No propellers found by name, attempting fallback by height...")
 			_find_propellers_fallback(drone_model)
 			print("Drone: Fallback found ", propellers.size(), " potential propellers.")
+
+		setup_show_lights()
 
 	else:
 		push_error("Drone: Failed to load Drone.gltf as a scene.")
@@ -303,13 +318,38 @@ func process_manual_flight(delta):
 	smoothed_input = smoothed_input.lerp(target, delta * INPUT_SMOOTHING)
 
 	# 2. MOVEMENT
-	var local_up = global_transform.basis.y
+	var local_up = Vector3.UP if hover_enabled else global_transform.basis.y
+	var forward_dir = -global_transform.basis.z
+	var strafe_dir = global_transform.basis.x
+	if hover_enabled:
+		forward_dir.y = 0.0
+		strafe_dir.y = 0.0
+		if not forward_dir.is_zero_approx():
+			forward_dir = forward_dir.normalized()
+		if not strafe_dir.is_zero_approx():
+			strafe_dir = strafe_dir.normalized()
 	var vertical_thrust = local_up * smoothed_input.x * THROTTLE_POWER
-	var forward_force = -global_transform.basis.z * smoothed_input.z * FORWARD_POWER
-	var strafe_force = global_transform.basis.x * smoothed_input.w * FORWARD_POWER
+	var forward_force = forward_dir * smoothed_input.z * FORWARD_POWER
+	var strafe_force = strafe_dir * smoothed_input.w * FORWARD_POWER
 	
 	apply_central_force(vertical_thrust + forward_force + strafe_force)
 
+	if hover_enabled:
+		var space_state = get_world_3d().direct_space_state
+		if space_state:
+			var from = global_position + Vector3.UP * 0.1
+			var to = global_position + Vector3.DOWN * 20.0
+			var query = PhysicsRayQueryParameters3D.create(from, to)
+			query.exclude = [get_rid()]
+			var result = space_state.intersect_ray(query)
+			if result.has("position"):
+				var ground_distance = global_position.y - result.position.y
+				if ground_distance < HOVER_MIN_CLEARANCE:
+					var hover_force = (HOVER_MIN_CLEARANCE - ground_distance) * HOVER_HOLD_FORCE
+					hover_force -= linear_velocity.y * HOVER_HOLD_DAMPING
+					hover_force = clamp(hover_force, 0.0, HOVER_MAX_HOLD_FORCE)
+					apply_central_force(Vector3.UP * hover_force)
+	
 	# 3. Rotation
 	apply_torque(global_transform.basis.x * -smoothed_input.z * TURN_POWER)
 	apply_torque(global_transform.basis.z * -smoothed_input.w * TURN_POWER)
@@ -330,6 +370,9 @@ func process_manual_flight(delta):
 	if legacy_props:
 		for prop in legacy_props.get_children():
 			prop.rotate_y(delta * prop_speed)
+
+func apply_hover_mode():
+	gravity_scale = 0.0 if hover_enabled else 1.0
 
 func get_terrain_height_at(pos: Vector3) -> float:
 	var space_state = get_world_3d().direct_space_state
@@ -544,17 +587,28 @@ func toggle_boids_swarm():
 		boids_manager = null
 	else:
 		print("Drone: Enabling Boids Swarm!")
-		var boid_mgr_script = load("res://scripts/BoidManager.gd")
+		var boid_mgr_script: Script = load("res://scripts/BoidManager.gd")
 		if not boid_mgr_script:
 			push_error("Drone: BoidManager.gd script not found.")
 			return
 		boids_manager = Node3D.new()
 		boids_manager.set_script(boid_mgr_script)
+		boids_manager.process_mode = Node.PROCESS_MODE_PAUSABLE
 		get_parent().add_child(boids_manager)
 		boids_manager.initialize(self)
 
 func get_propeller_count() -> int:
 	return propellers.size()
+
+func setup_show_lights():
+	if show_rig != null:
+		return
+
+	show_rig = DroneShowLightRig.new()
+	show_rig.name = "ShowLights"
+	show_rig.position = Vector3(0, -0.18, 0)
+	add_child(show_rig)
+	show_rig.configure(0, 1, true)
 
 func _process(_delta):
 	if get_tree().paused: return
@@ -571,7 +625,14 @@ func _process(_delta):
 		camera_toggle_cooldown = 0.2
 	
 	if Input.is_key_pressed(KEY_R): get_tree().reload_current_scene()
-	
+
+	# Key H: Toggle hover mode to cancel gravity without changing movement controls
+	if Input.is_key_pressed(KEY_H) and state_toggle_cooldown <= 0:
+		state_toggle_cooldown = 0.3
+		hover_enabled = !hover_enabled
+		apply_hover_mode()
+		print("Drone: Hover mode ", "enabled" if hover_enabled else "disabled", ".")
+
 	# Key 5: Toggle Autopilot (Track Flight)
 	if Input.is_key_pressed(KEY_5) and state_toggle_cooldown <= 0:
 		state_toggle_cooldown = 0.3
@@ -581,8 +642,8 @@ func _process(_delta):
 		else:
 			flight_state = FlightState.AUTOPILOT
 			# Find nearest waypoint to start from
-			var nearest_idx = 0
-			var nearest_dist = 999999.0
+			var nearest_idx: int = 0
+			var nearest_dist: float = 999999.0
 			for i in range(autopilot_waypoints.size()):
 				var d = global_position.distance_to(autopilot_waypoints[i])
 				if d < nearest_dist:

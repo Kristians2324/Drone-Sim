@@ -27,6 +27,7 @@ func load_environment(EnvironmentClass):
 		current_environment = null
 	
 	current_environment = EnvironmentClass.new()
+	current_environment.process_mode = Node.PROCESS_MODE_PAUSABLE
 	add_child(current_environment)
 
 func _input(event):

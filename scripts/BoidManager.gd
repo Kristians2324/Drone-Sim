@@ -16,16 +16,38 @@ class_name BoidManager
 @export var target_arrival_radius: float = 15.0
 @export var target_separation_radius: float = 6.0
 
+# Pursuit tuning so the swarm keeps up with a fast-moving drone.
+@export var target_lead_time: float = 0.45
+@export var target_catchup_distance: float = 55.0
+@export var target_catchup_speed_bonus: float = 16.0
+@export var min_target_speed_ratio: float = 0.7
+
 @export var max_speed: float = 20.0
 @export var max_force: float = 12.0
 
 var boids: Array[Boid] = []
 var target_node: Node3D = null
 
+
+func _get_target_velocity() -> Vector3:
+	if target_node is RigidBody3D:
+		return (target_node as RigidBody3D).linear_velocity
+	return Vector3.ZERO
+
+
+func _get_pursuit_point(target_pos: Vector3, distance_to_target: float) -> Vector3:
+	var target_velocity := _get_target_velocity()
+	if target_velocity.is_zero_approx():
+		return target_pos
+
+	var distance_factor: float = clampf(distance_to_target / maxf(target_catchup_distance, 0.001), 0.0, 1.0)
+	var lead_time: float = lerpf(target_lead_time * 0.35, target_lead_time, distance_factor)
+	return target_pos + (target_velocity * lead_time)
+
 func get_terrain_height_at(pos: Vector3) -> float:
 	var space_state = get_world_3d().direct_space_state
 	if not space_state:
-		return 0.0
+		return 0.0 
 	# Raycast from high up straight down
 	var from = Vector3(pos.x, 300.0, pos.z)
 	var to = Vector3(pos.x, -50.0, pos.z)
@@ -44,10 +66,15 @@ func initialize(target: Node3D):
 	target_node = target
 	spawn_boids()
 
+
+func _ready():
+	process_mode = Node.PROCESS_MODE_PAUSABLE
+
 func spawn_boids():
 	var spawn_center = target_node.global_position if target_node else Vector3.ZERO
 	for i in range(boid_count):
 		var boid = Boid.new()
+		boid.process_mode = Node.PROCESS_MODE_PAUSABLE
 		# Random position within a sphere around the player
 		var offset = Vector3(
 			randf_range(-10.0, 10.0),
@@ -63,12 +90,6 @@ func spawn_boids():
 			randf_range(-5.0, 5.0)
 		).normalized() * randf_range(5.0, 10.0)
 		
-		# Set colors in a beautiful palette (varying green, cyan, blue, magenta)
-		var hue = randf_range(0.3, 0.9)
-		if hue > 0.55 and hue < 0.7: # Skip dark blues
-			hue = randf_range(0.3, 0.5)
-		var col = Color.from_hsv(hue, 0.9, 0.95)
-		
 		# Make sure materials are fully initialized in ready before modifying, 
 		# but since we are modifying them here after instantiation, let's call _ready if not ready,
 		# or just update them. In Godot, ready is called when node is added to scene tree.
@@ -77,15 +98,14 @@ func spawn_boids():
 		add_child(boid)
 		
 		# Now that it's added to the tree, its _ready has run and mesh_instance exists.
-		if boid.mesh_instance and boid.mesh_instance.material_override:
-			boid.mesh_instance.material_override.albedo_color = col
-		if boid.trail_particles and boid.trail_particles.color_ramp:
-			boid.trail_particles.color_ramp.set_color(0, Color(col.r, col.g, col.b, 0.8))
-			boid.trail_particles.color_ramp.set_color(1, Color(col.r, col.g, col.b, 0.0))
+		boid.configure_show_lights(i, boid_count, false)
 			
 		boids.append(boid)
 
 func _physics_process(delta):
+	if get_tree().paused:
+		return
+
 	if boids.size() == 0:
 		return
 		
@@ -158,20 +178,28 @@ func _physics_process(delta):
 			
 		# Target Seeking (Seek player drone with Arrival behavior)
 		var dist_to_target = pos.distance_to(target_pos)
+		var pursuit_point = _get_pursuit_point(target_pos, dist_to_target)
 		var steer_target = Vector3.ZERO
 		if dist_to_target > 0.001:
-			var speed = max_speed
+			var catchup_factor: float = clampf((dist_to_target - target_arrival_radius) / maxf(target_catchup_distance, 0.001), 0.0, 1.0)
+			var speed_floor: float = max_speed * min_target_speed_ratio
+			var speed_ceiling: float = max_speed + target_catchup_speed_bonus
+			var speed: float = lerpf(speed_floor, speed_ceiling, catchup_factor)
 			if dist_to_target < target_arrival_radius:
-				speed = max_speed * (dist_to_target / target_arrival_radius)
-			var desired_target = (target_pos - pos).normalized() * speed
-			steer_target = (desired_target - vel).limit_length(max_force)
+				var approach_ratio: float = clampf(dist_to_target / maxf(target_arrival_radius, 0.001), 0.0, 1.0)
+				speed = maxf(speed_floor, lerpf(speed_floor, max_speed, approach_ratio))
+			var desired_target = (pursuit_point - pos).normalized() * speed
+			var catchup_force: float = max_force
+			if dist_to_target > target_arrival_radius:
+				catchup_force *= lerpf(1.0, 1.75, catchup_factor)
+			steer_target = (desired_target - vel).limit_length(catchup_force)
 			
 		# Separation from the player/target drone to avoid collision
 		var steer_target_separation = Vector3.ZERO
 		if dist_to_target < target_separation_radius and dist_to_target > 0.001:
-			var diff = (pos - target_pos).normalized() / dist_to_target
+			var diff = (pos - pursuit_point).normalized() / dist_to_target
 			var desired = diff * max_speed
-			steer_target_separation = (desired - vel).limit_length(max_force)
+			steer_target_separation = (desired - vel).limit_length(max_force * 1.5)
 			
 		# Ground Avoidance (Stay above terrain dynamically using raycast query)
 		var steer_ground = Vector3.ZERO
@@ -194,7 +222,10 @@ func _physics_process(delta):
 		)
 		
 		# Apply velocity update
-		boid.velocity = (vel + total_force * delta).limit_length(max_speed)
+		var velocity_cap: float = max_speed
+		if dist_to_target > target_arrival_radius:
+			velocity_cap = max_speed + target_catchup_speed_bonus
+		boid.velocity = (vel + total_force * delta).limit_length(velocity_cap)
 		
 		# Update position and rotation
 		boid.update_boid(delta)

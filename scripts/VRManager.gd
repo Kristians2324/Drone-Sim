@@ -4,7 +4,16 @@ var xr_interface: XRInterface
 
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	_apply_fullscreen_to_primary_display()
 	initialize_vr()
+
+func _apply_fullscreen_to_primary_display():
+	var screen_index := DisplayServer.window_get_current_screen()
+	var screen_size := DisplayServer.screen_get_size(screen_index)
+
+	DisplayServer.window_set_current_screen(screen_index)
+	DisplayServer.window_set_size(screen_size)
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 func initialize_vr():
 	xr_interface = XRServer.find_interface("OpenXR")
