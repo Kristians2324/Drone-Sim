@@ -34,12 +34,27 @@ func clear_swarm():
     drones.clear()
     active = false
 
+var update_accumulator = 0.0
+var update_interval = 0.1  # 10 updates per second for swarm to reduce CPU usage
+
 func _process(delta):
     if not active:
         return
-    # TODO: swarm AI logic for each drone here, setting smoothed_input for behavior
-    # Example: simple hover with random movement (placeholder)
+
+    update_accumulator += delta
+    if update_accumulator < update_interval:
+        return
+    update_accumulator = 0.0
+
+    # Simple swarm behavior placeholder: hover with random minor throttle adjustments
+    var center_pos = Vector3.ZERO
     for drone_inst in drones:
-        var random_input = Vector4(randf(), 0, 0, 0) # throttle only random
-        drone_inst.smoothed_input = random_input
+        center_pos += drone_inst.global_position
+    center_pos /= drones.size()
+
+    for drone_inst in drones:
+        # Compute direction from center to drone to keep swarm cohesive (simple cohesion)
+        var dir_to_center = (center_pos - drone_inst.global_position).normalized()
+        var input_vec = Vector4(0.5, 0, dir_to_center.z, dir_to_center.x)  # moderate throttle, pitch and roll to move closer
+        drone_inst.smoothed_input = input_vec
 
