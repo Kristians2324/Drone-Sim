@@ -292,32 +292,34 @@ func update_camera_views():
 
 func _physics_process(delta):
 	if get_tree().paused: return
-	
-	# Fill audio buffer (needs smoothed_input.x, which is set in state processors)
+
+	# Always fill motor audio buffer
 	fill_motor_buffer()
-	
-	match flight_state:
-		FlightState.MANUAL:
-			process_manual_flight(delta)
-		FlightState.AUTOPILOT:
-			process_autopilot_flight(delta)
-		FlightState.TRICK_LOOP:
-			process_trick_loop(delta)
-		FlightState.TRICK_BARREL:
-			process_trick_barrel(delta)
 
-func process_manual_flight(delta):
-	# 1. Inputs (Works for Keyboard + Xbox natively via Action Map)
-	var target = Vector4(
-		Input.get_axis("throttle_down", "throttle_up"),
-		Input.get_axis("turn_left", "turn_right"),
-		Input.get_axis("move_back", "move_forward"),
-		Input.get_axis("move_left", "move_right")
-	)
+	# TEMPORARY DEBUG: Direct input handling inside Drone for testing movement
+	var throttle_input = Input.get_action_strength("throttle_up") - Input.get_action_strength("throttle_down")
+	var yaw_input = Input.get_action_strength("turn_right") - Input.get_action_strength("turn_left")
+	var pitch_input = Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
+	var roll_input = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
 	
-	smoothed_input = smoothed_input.lerp(target, delta * INPUT_SMOOTHING)
+	var direct_input = Vector4(throttle_input, yaw_input, pitch_input, roll_input)
+	
+	if direct_input != Vector4.ZERO:
+		_apply_input_forces(delta, direct_input)
+	else:
+		# If no direct input, use external smoothed input as fallback
+		if smoothed_input != Vector4.ZERO:
+			_apply_input_forces(delta, smoothed_input)
 
-	# 2. MOVEMENT
+	# TODO: Implement autopilot and tricks outside or via controller scripts
+
+
+var smoothed_input_internal = Vector4.ZERO
+
+func _apply_input_forces(delta, input_vec: Vector4):
+	# Smooth input as in the old manual flight
+	smoothed_input_internal = smoothed_input_internal.lerp(input_vec, delta * INPUT_SMOOTHING)
+
 	var local_up = Vector3.UP if hover_enabled else global_transform.basis.y
 	var forward_dir = -global_transform.basis.z
 	var strafe_dir = global_transform.basis.x
@@ -328,10 +330,11 @@ func process_manual_flight(delta):
 			forward_dir = forward_dir.normalized()
 		if not strafe_dir.is_zero_approx():
 			strafe_dir = strafe_dir.normalized()
-	var vertical_thrust = local_up * smoothed_input.x * THROTTLE_POWER
-	var forward_force = forward_dir * smoothed_input.z * FORWARD_POWER
-	var strafe_force = strafe_dir * smoothed_input.w * FORWARD_POWER
-	
+
+	var vertical_thrust = local_up * smoothed_input_internal.x * THROTTLE_POWER
+	var forward_force = forward_dir * smoothed_input_internal.z * FORWARD_POWER
+	var strafe_force = strafe_dir * smoothed_input_internal.w * FORWARD_POWER
+
 	apply_central_force(vertical_thrust + forward_force + strafe_force)
 
 	if hover_enabled:
@@ -349,27 +352,36 @@ func process_manual_flight(delta):
 					hover_force -= linear_velocity.y * HOVER_HOLD_DAMPING
 					hover_force = clamp(hover_force, 0.0, HOVER_MAX_HOLD_FORCE)
 					apply_central_force(Vector3.UP * hover_force)
-	
-	# 3. Rotation
-	apply_torque(global_transform.basis.x * -smoothed_input.z * TURN_POWER)
-	apply_torque(global_transform.basis.z * -smoothed_input.w * TURN_POWER)
-	apply_torque(global_transform.basis.y * -smoothed_input.y * TURN_POWER)
-	
-	# 4. Stabilization
+
+	apply_torque(global_transform.basis.x * -smoothed_input_internal.z * TURN_POWER)
+	apply_torque(global_transform.basis.z * -smoothed_input_internal.w * TURN_POWER)
+	apply_torque(global_transform.basis.y * -smoothed_input_internal.y * TURN_POWER)
+
 	var up = global_transform.basis.y
 	var correction = up.cross(Vector3.UP)
 	apply_torque(correction * STABILIZE_FORCE)
-	
-	# Props
-	var prop_speed = 30.0 + (smoothed_input.x * 60.0)
+
+	var prop_speed = 30.0 + (smoothed_input_internal.x * 60.0)
 	for prop in propellers:
 		prop.rotate_y(delta * prop_speed)
-	
-	# Legacy props (if any left)
+
 	var legacy_props = design.get_node_or_null("Props")
 	if legacy_props:
 		for prop in legacy_props.get_children():
 			prop.rotate_y(delta * prop_speed)
+
+# Removed manual input processing as it is now external in controllers
+#func process_manual_flight(delta):
+#	pass
+
+# Removed autopilot and trick calls in _physics_process
+# Entire flight control is external now
+
+func set_input_vector(input_vec: Vector4) -> void:
+	# Set input vector from external controller
+	print("Drone: Received input vector: ", input_vec)
+	smoothed_input = input_vec
+
 
 func apply_hover_mode():
 	gravity_scale = 0.0 if hover_enabled else 1.0
