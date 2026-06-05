@@ -1,7 +1,8 @@
 extends Node3D
 class_name BoidManager
 
-@export var boid_count: int = 60
+@export var drone_scene: PackedScene = preload("res://scenes/Drone.tscn")
+@export var boid_count: int = 15
 @export var neighborhood_radius: float = 12.0
 @export var separation_radius: float = 3.5
 
@@ -25,15 +26,13 @@ class_name BoidManager
 @export var max_speed: float = 20.0
 @export var max_force: float = 12.0
 
-var boids: Array[Boid] = []
+var boids: Array[RigidBody3D] = []
 var target_node: Node3D = null
-
 
 func _get_target_velocity() -> Vector3:
 	if target_node is RigidBody3D:
 		return (target_node as RigidBody3D).linear_velocity
 	return Vector3.ZERO
-
 
 func _get_pursuit_point(target_pos: Vector3, distance_to_target: float) -> Vector3:
 	var target_velocity := _get_target_velocity()
@@ -48,12 +47,10 @@ func get_terrain_height_at(pos: Vector3) -> float:
 	var space_state = get_world_3d().direct_space_state
 	if not space_state:
 		return 0.0 
-	# Raycast from high up straight down
 	var from = Vector3(pos.x, 300.0, pos.z)
 	var to = Vector3(pos.x, -50.0, pos.z)
 	var query = PhysicsRayQueryParameters3D.create(from, to)
 	
-	# Exclude target player drone
 	if target_node:
 		query.exclude = [target_node.get_rid()]
 		
@@ -66,41 +63,35 @@ func initialize(target: Node3D):
 	target_node = target
 	spawn_boids()
 
-
 func _ready():
 	process_mode = Node.PROCESS_MODE_PAUSABLE
 
 func spawn_boids():
 	var spawn_center = target_node.global_position if target_node else Vector3.ZERO
 	for i in range(boid_count):
-		var boid = Boid.new()
-		boid.process_mode = Node.PROCESS_MODE_PAUSABLE
+		var drone_inst = drone_scene.instantiate()
+		add_child(drone_inst)
+		
 		# Random position within a sphere around the player
 		var offset = Vector3(
 			randf_range(-10.0, 10.0),
 			randf_range(2.0, 10.0),
 			randf_range(-10.0, 10.0)
 		)
-		boid.global_position = spawn_center + offset
+		drone_inst.global_position = spawn_center + offset
 		
 		# Random initial velocity
-		boid.velocity = Vector3(
+		drone_inst.linear_velocity = Vector3(
 			randf_range(-5.0, 5.0),
 			randf_range(-2.0, 5.0),
 			randf_range(-5.0, 5.0)
 		).normalized() * randf_range(5.0, 10.0)
 		
-		# Make sure materials are fully initialized in ready before modifying, 
-		# but since we are modifying them here after instantiation, let's call _ready if not ready,
-		# or just update them. In Godot, ready is called when node is added to scene tree.
-		# Since we haven't added it to scene tree yet, the node's _ready hasn't run.
-		# Let's add it to the scene tree first!
-		add_child(boid)
-		
-		# Now that it's added to the tree, its _ready has run and mesh_instance exists.
-		boid.configure_show_lights(i, boid_count, false)
+		# Configure show lights if ready
+		if drone_inst.show_rig:
+			drone_inst.show_rig.configure(i, boid_count, false)
 			
-		boids.append(boid)
+		boids.append(drone_inst)
 
 func _physics_process(delta):
 	if get_tree().paused:
@@ -118,11 +109,19 @@ func _physics_process(delta):
 	velocities.resize(boids.size())
 	
 	for i in range(boids.size()):
-		positions[i] = boids[i].global_position
-		velocities[i] = boids[i].velocity
+		var b = boids[i]
+		if b and is_instance_valid(b):
+			positions[i] = b.global_position
+			velocities[i] = b.linear_velocity
+		else:
+			positions[i] = Vector3.ZERO
+			velocities[i] = Vector3.ZERO
 		
 	for i in range(boids.size()):
 		var boid = boids[i]
+		if not boid or not is_instance_valid(boid):
+			continue
+			
 		var pos = positions[i]
 		var vel = velocities[i]
 		
@@ -201,7 +200,7 @@ func _physics_process(delta):
 			var desired = diff * max_speed
 			steer_target_separation = (desired - vel).limit_length(max_force * 1.5)
 			
-		# Ground Avoidance (Stay above terrain dynamically using raycast query)
+		# Ground Avoidance (Stay above terrain dynamically)
 		var steer_ground = Vector3.ZERO
 		var terrain_height = get_terrain_height_at(pos)
 		var min_height_above_ground = 7.0
@@ -221,11 +220,18 @@ func _physics_process(delta):
 			steer_ground * ground_avoid_weight
 		)
 		
-		# Apply velocity update
-		var velocity_cap: float = max_speed
-		if dist_to_target > target_arrival_radius:
-			velocity_cap = max_speed + target_catchup_speed_bonus
-		boid.velocity = (vel + total_force * delta).limit_length(velocity_cap)
+		# Convert steering forces to inputs for physical drone
+		var local_force = boid.global_transform.basis.inverse() * total_force
+		var throttle = clamp(0.5 + total_force.y * 0.05, 0.0, 1.0)
+		var yaw = 0.0
 		
-		# Update position and rotation
-		boid.update_boid(delta)
+		if vel.length_squared() > 1.0:
+			var target_dir = vel.normalized()
+			var current_dir = -boid.global_transform.basis.z
+			var angle = current_dir.signed_angle_to(target_dir, Vector3.UP)
+			yaw = clamp(angle * 1.5, -1.0, 1.0)
+			
+		var pitch = clamp(-local_force.z * 0.05, -1.0, 1.0)
+		var roll = clamp(local_force.x * 0.05, -1.0, 1.0)
+		
+		boid.set_input_vector(Vector4(throttle, yaw, pitch, roll))
