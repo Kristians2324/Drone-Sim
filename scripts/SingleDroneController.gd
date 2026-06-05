@@ -15,11 +15,10 @@ func _ready():
     drone_input.initialize(3.5) # smoothing factor
 
 func _process(delta):
-    print("SingleDroneController _process running")
     if drone == null:
         return
+
     var input_vec = drone_input.get_smoothed_input(delta)
-    print("SingleDroneController input_vec:", input_vec)
     # Send input vector to drone
     if drone.has_method("set_input_vector"):
         drone.call("set_input_vector", input_vec)

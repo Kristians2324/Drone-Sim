@@ -296,22 +296,28 @@ func _physics_process(delta):
 	# Always fill motor audio buffer
 	fill_motor_buffer()
 
-	# TEMPORARY DEBUG: Direct input handling inside Drone for testing movement
-	var throttle_input = Input.get_action_strength("throttle_up") - Input.get_action_strength("throttle_down")
-	var yaw_input = Input.get_action_strength("turn_right") - Input.get_action_strength("turn_left")
-	var pitch_input = Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
-	var roll_input = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
-	
-	var direct_input = Vector4(throttle_input, yaw_input, pitch_input, roll_input)
-	
-	if direct_input != Vector4.ZERO:
-		_apply_input_forces(delta, direct_input)
-	else:
-		# If no direct input, use external smoothed input as fallback
-		if smoothed_input != Vector4.ZERO:
-			_apply_input_forces(delta, smoothed_input)
-
-	# TODO: Implement autopilot and tricks outside or via controller scripts
+	match flight_state:
+		FlightState.MANUAL:
+			# TEMPORARY DEBUG: Direct input handling inside Drone for testing movement
+			var throttle_input = Input.get_action_strength("throttle_up") - Input.get_action_strength("throttle_down")
+			var yaw_input = Input.get_action_strength("turn_right") - Input.get_action_strength("turn_left")
+			var pitch_input = Input.get_action_strength("move_forward") - Input.get_action_strength("move_back")
+			var roll_input = Input.get_action_strength("move_right") - Input.get_action_strength("move_left")
+			
+			var direct_input = Vector4(throttle_input, yaw_input, pitch_input, roll_input)
+			
+			if direct_input != Vector4.ZERO:
+				_apply_input_forces(delta, direct_input)
+			else:
+				# If no direct input, use external smoothed input as fallback
+				if smoothed_input != Vector4.ZERO:
+					_apply_input_forces(delta, smoothed_input)
+		FlightState.AUTOPILOT:
+			process_autopilot_flight(delta)
+		FlightState.TRICK_LOOP:
+			process_trick_loop(delta)
+		FlightState.TRICK_BARREL:
+			process_trick_barrel(delta)
 
 
 var smoothed_input_internal = Vector4.ZERO
@@ -379,7 +385,7 @@ func _apply_input_forces(delta, input_vec: Vector4):
 
 func set_input_vector(input_vec: Vector4) -> void:
 	# Set input vector from external controller
-	print("Drone: Received input vector: ", input_vec)
+	# print("Drone: Received input vector: ", input_vec)
 	smoothed_input = input_vec
 
 
@@ -504,7 +510,7 @@ func process_autopilot_flight(delta):
 		for prop in legacy_props.get_children():
 			prop.rotate_y(delta * prop_speed)
 
-func start_trick_loop(from_manual = false):
+func start_trick_loop(from_manual = true):
 	flight_state = FlightState.TRICK_LOOP
 	post_trick_state = FlightState.MANUAL if from_manual else FlightState.AUTOPILOT
 	trick_time = 0.0
@@ -622,20 +628,38 @@ func setup_show_lights():
 	add_child(show_rig)
 	show_rig.configure(0, 1, true)
 
-func _process(_delta):
+# Moved toggle_autopilot out of any function, defined at class level
+func toggle_autopilot():
+	if flight_state == FlightState.AUTOPILOT:
+		flight_state = FlightState.MANUAL
+		print("Drone: Autopilot disabled. Returning to manual control.")
+	else:
+		flight_state = FlightState.AUTOPILOT
+		# Find nearest waypoint to start from
+		var nearest_idx: int = 0
+		var nearest_dist: float = 999999.0
+		for i in range(autopilot_waypoints.size()):
+			var d = global_position.distance_to(autopilot_waypoints[i])
+			if d < nearest_dist:
+				nearest_dist = d
+				nearest_idx = i
+		current_waypoint_index = nearest_idx
+		print("Drone: Autopilot enabled! Heading to waypoint: ", nearest_idx)
+
+func _process(delta):
 	if get_tree().paused: return
-	
+
 	if camera_toggle_cooldown > 0:
-		camera_toggle_cooldown -= _delta
-		
+		camera_toggle_cooldown -= delta
+
 	if state_toggle_cooldown > 0:
-		state_toggle_cooldown -= _delta
-	
+		state_toggle_cooldown -= delta
+
 	if Input.is_key_pressed(KEY_C) and camera_toggle_cooldown <= 0:
 		is_first_person = !is_first_person
 		update_camera_views()
 		camera_toggle_cooldown = 0.2
-	
+
 	if Input.is_key_pressed(KEY_R): get_tree().reload_current_scene()
 
 	# Key H: Toggle hover mode to cancel gravity without changing movement controls
@@ -648,36 +672,24 @@ func _process(_delta):
 	# Key 5: Toggle Autopilot (Track Flight)
 	if Input.is_key_pressed(KEY_5) and state_toggle_cooldown <= 0:
 		state_toggle_cooldown = 0.3
-		if flight_state == FlightState.AUTOPILOT:
-			flight_state = FlightState.MANUAL
-			print("Drone: Autopilot disabled. Returning to manual control.")
-		else:
-			flight_state = FlightState.AUTOPILOT
-			# Find nearest waypoint to start from
-			var nearest_idx: int = 0
-			var nearest_dist: float = 999999.0
-			for i in range(autopilot_waypoints.size()):
-				var d = global_position.distance_to(autopilot_waypoints[i])
-				if d < nearest_dist:
-					nearest_dist = d
-					nearest_idx = i
-			current_waypoint_index = nearest_idx
-			print("Drone: Autopilot enabled! Heading to waypoint: ", nearest_idx)
-			
+		toggle_autopilot()
+
 	# Key 6: Perform Loop-de-loop
 	if Input.is_key_pressed(KEY_6) and state_toggle_cooldown <= 0:
 		state_toggle_cooldown = 0.3
 		start_trick_loop(flight_state == FlightState.MANUAL)
-		
+
 	# Key 7: Perform Barrel Roll
 	if Input.is_key_pressed(KEY_7) and state_toggle_cooldown <= 0:
 		state_toggle_cooldown = 0.3
 		start_trick_barrel(flight_state == FlightState.MANUAL)
-		
+
 	# Key 8: Toggle Swarm (Boids Mode)
 	if Input.is_key_pressed(KEY_8) and state_toggle_cooldown <= 0:
 		state_toggle_cooldown = 0.3
 		toggle_boids_swarm()
+
+
 
 func setup_drone_audio():
 	# 1. Continuous Motor Sound
@@ -726,10 +738,30 @@ func fill_motor_buffer():
 	if motor_playback == null: return
 	
 	var n = motor_playback.get_frames_available()
-	# Gentle hum range
-	var throttle = clamp(smoothed_input.x, 0.0, 1.0)
+	
+	# Determine effective input throttle/effort based on flight state
+	var input_thrust = 0.0
+	var input_movement = 0.0
+	var input_yaw = 0.0
+	
+	if flight_state == FlightState.MANUAL:
+		input_thrust = abs(smoothed_input_internal.x)
+		input_movement = Vector2(smoothed_input_internal.z, smoothed_input_internal.w).length()
+		input_yaw = abs(smoothed_input_internal.y)
+	else:
+		input_thrust = abs(smoothed_input.x)
+		input_movement = Vector2(smoothed_input.z, smoothed_input.w).length()
+		input_yaw = abs(smoothed_input.y)
+		
+	# Calculate total motor effort (combining translation, vertical thrust and rotation)
+	var motor_effort = max(input_thrust, input_movement * 0.45 + input_yaw * 0.25)
+	
+	# Also take current physical speed into account for a dynamic moving sound
+	var speed_contrib = clamp(linear_velocity.length() / 20.0, 0.0, 0.5)
+	
+	var throttle = clamp(max(motor_effort, speed_contrib), 0.0, 1.0)
 	var freq = 60.0 + (throttle * 120.0) 
-	var volume = 0.005 + (throttle * 0.015) # Near-silent base volume
+	var volume = 0.005 + (throttle * 0.015) # Dynamically scales up with throttle
 	
 	while n > 0:
 		# Very soft layered sines
