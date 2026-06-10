@@ -8,6 +8,10 @@ var current_environment: BaseEnvironment = null
 func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	
+	# Add FPS Counter
+	var fps_counter = preload("res://scripts/FPSCounter.gd").new()
+	add_child(fps_counter)
+	
 	# Initial VR Setup
 	vr_manager = load("res://scripts/VRManager.gd").new()
 	vr_manager.name = "VRManager"
