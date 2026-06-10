@@ -3,11 +3,11 @@ class_name DroneController
 
 # References to component nodes
 @onready var design: Node3D = $Design
-@onready var model_component: Node = $Design/Model
-@onready var camera_component: Node = $Design/Cameras
-@onready var physics_component: Node = $Physics
-@onready var input_component: Node = $InputHandler
-@onready var audio_component: Node = $Audio
+@onready var model_component: Node3D = $Design/Model
+@onready var camera_component: Node3D = $Design/Cameras
+@onready var physics_component: Node3D = $Physics
+@onready var input_component: Node3D = $InputHandler
+@onready var audio_component: Node3D = $Audio
 
 # Configuration
 @export var throttle_power: float = 180.0

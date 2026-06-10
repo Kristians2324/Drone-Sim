@@ -2,11 +2,11 @@ extends Node3D
 class_name EnvironmentController
 
 # References to components
-@onready var terrain: Node = $Terrain
-@onready var sky: Node = $SkyEnvironment
-@onready var town: Node = $Town
-@onready var world_details: Node = $WorldDetails
-@onready var mountains: Node = $Mountains
+@onready var terrain: Node3D = $Terrain
+@onready var sky: Node3D = $SkyEnvironment
+@onready var town: Node3D = $Town
+@onready var world_details: Node3D = $WorldDetails
+@onready var mountains: Node3D = $Mountains
 
 func _ready():
 	initialize_components()

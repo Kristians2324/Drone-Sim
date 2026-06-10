@@ -4,7 +4,7 @@ extends Node3D
 @export var smoothing : float = 5.0
 @export var camera_node_path: NodePath
 
-var swarm_controller: Node = null
+var swarm_controller: Node3D = null
 var camera_node: Camera3D = null
 var target_position: Vector3
 

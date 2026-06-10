@@ -96,7 +96,7 @@ func replace_drone_model():
 			drone_model.scale = Vector3(2.5, 2.5, 2.5)
 			
 		# Shrink the central body block
-		var central_cube: Node = drone_model.find_child("Cube*", true, false)
+		var central_cube: Node3D = drone_model.find_child("Cube*", true, false)
 		if not central_cube: central_cube = drone_model.find_child("*Cube*", true, false)
 		if central_cube:
 			central_cube.scale *= 0.4 

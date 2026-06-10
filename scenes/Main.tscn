@@ -12,5 +12,5 @@
 [node name="Main" type="Node3D" unique_id=383992290]
 script = ExtResource("5_wm")
 
-[node name="DroneControllerManager" type="Node" parent="."]
+[node name="DroneControllerManager" type="Node3D" parent="."]
 script = ExtResource("10_dcm")

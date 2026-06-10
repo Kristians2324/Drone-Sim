@@ -3,7 +3,7 @@ extends Node3D
 @export var drone_scene: PackedScene = preload("res://scenes/Drone.tscn")
 
 var drone: RigidBody3D = null
-var drone_input: Node = null
+var drone_input = null
 
 var is_first_person: bool = true
 var camera_toggle_cooldown: float = 0.0
