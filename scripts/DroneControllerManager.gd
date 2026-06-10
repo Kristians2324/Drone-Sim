@@ -12,6 +12,10 @@ var spring_arm: SpringArm3D
 var tp_camera: Camera3D
 var fp_camera: Camera3D
 
+# Swarm mode
+var swarm_mode: bool = false
+var swarm_controller: Node = null
+
 enum FlightState { MANUAL, AUTOPILOT, TRICK_LOOP, TRICK_BARREL }
 var flight_state = FlightState.MANUAL
 
@@ -79,7 +83,11 @@ func cleanup():
 	if drone and is_instance_valid(drone):
 		drone.queue_free()
 		drone = null
-	print("SingleDroneController: Cleaned up player drone and cameras.")
+	if swarm_controller and is_instance_valid(swarm_controller):
+		swarm_controller.cleanup()
+		swarm_controller.queue_free()
+		swarm_controller = null
+	print("DroneControllerManager: Cleaned up resources")
 
 func update_camera_views():
 	if not drone or not is_instance_valid(drone): return
@@ -87,7 +95,7 @@ func update_camera_views():
 	fp_camera.current = is_first_person
 
 func _process(delta):
-	if not drone or not is_instance_valid(drone):
+	if swarm_mode or not drone or not is_instance_valid(drone):
 		return
 
 	if camera_toggle_cooldown > 0: camera_toggle_cooldown -= delta
@@ -102,7 +110,7 @@ func _process(delta):
 		state_toggle_cooldown = 0.3
 		drone.hover_enabled = !drone.hover_enabled
 		drone.apply_hover_mode()
-		print("SingleDroneController: Hover mode ", "enabled" if drone.hover_enabled else "disabled")
+		print("DroneControllerManager: Hover mode ", "enabled" if drone.hover_enabled else "disabled")
 
 	if Input.is_key_pressed(KEY_5) and state_toggle_cooldown <= 0:
 		state_toggle_cooldown = 0.3
@@ -116,6 +124,10 @@ func _process(delta):
 		state_toggle_cooldown = 0.3
 		start_trick_barrel(flight_state == FlightState.MANUAL)
 
+	if Input.is_key_pressed(KEY_8) and state_toggle_cooldown <= 0:
+		state_toggle_cooldown = 0.3
+		toggle_swarm_mode()
+
 	spring_arm.global_position = drone.global_position + Vector3(0, 0.5, 0)
 	spring_arm.global_transform.basis = drone.global_transform.basis
 	spring_arm.rotate_object_local(Vector3.RIGHT, deg_to_rad(-20))
@@ -123,8 +135,17 @@ func _process(delta):
 	var fp_pos = drone.global_transform * Vector3(0, 0.15, -0.35)
 	fp_camera.global_position = fp_pos
 	fp_camera.global_transform.basis = drone.global_transform.basis.rotated(drone.global_transform.basis.x, deg_to_rad(15))
+	
+	# Also allow swarm toggle even without drone
+	if drone == null and Input.is_key_pressed(KEY_8) and state_toggle_cooldown <= 0:
+		state_toggle_cooldown = 0.3
+		toggle_swarm_mode()
 
 func _physics_process(delta):
+	if swarm_mode:
+		# Swarm mode is handled by SwarmController
+		return
+		
 	if not drone or not is_instance_valid(drone):
 		return
 
@@ -139,16 +160,134 @@ func _physics_process(delta):
 		FlightState.TRICK_BARREL:
 			process_trick_barrel(delta)
 
+func process_autopilot_flight(delta):
+	# Navigate to waypoint
+	var target = autopilot_waypoints[current_waypoint_index]
+	var direction = (target - drone.global_position).normalized()
+	var distance = drone.global_position.distance_to(target)
+	
+	# Check if reached waypoint
+	if distance < waypoint_reach_distance:
+		current_waypoint_index = (current_waypoint_index + 1) % autopilot_waypoints.size()
+		print("DroneControllerManager: Reached waypoint, moving to next")
+		return
+	
+	# Create input vector for autopilot
+	var input_vec = Vector4(0.5, 0, 0, 0)  # Default throttle
+	
+	# Calculate desired direction and set input accordingly
+	if direction.length() > 0:
+		var forward = -drone.global_transform.basis.z
+		var angle_to_target = forward.signed_angle_to(direction, drone.global_transform.basis.y)
+		input_vec.y = clamp(angle_to_target * 0.5, -1.0, 1.0)
+	
+	drone.set_input_vector(input_vec)
+
+func process_trick_loop(delta):
+	trick_time += delta
+	
+	# Complete the loop after duration
+	if trick_time >= LOOP_DURATION:
+		flight_state = FlightState.MANUAL
+		print("DroneControllerManager: Loop trick completed")
+		return
+	
+	# Calculate position on circular path
+	var progress = trick_time / LOOP_DURATION
+	var angle = progress * TAU  # Full rotation
+	
+	# Position along loop
+	var local_forward = cos(angle) * loop_radius
+	var local_up = sin(angle) * loop_radius
+	var target_pos = loop_center + loop_forward * local_forward + loop_up * local_up
+	
+	# Move drone to target position
+	var direction = (target_pos - drone.global_position).normalized()
+	drone.linear_velocity = direction * 20.0
+	
+	# Rotate drone along the loop
+	var target_basis = Basis.looking_at(-direction, loop_up)
+	drone.global_transform.basis = drone.global_transform.basis.slerp(target_basis, delta * 5.0)
+
+func process_trick_barrel(delta):
+	trick_time += delta
+	
+	# Complete barrel roll after duration
+	if trick_time >= BARREL_DURATION:
+		flight_state = FlightState.MANUAL
+		print("DroneControllerManager: Barrel roll trick completed")
+		return
+	
+	# Calculate position on barrel path
+	var progress = trick_time / BARREL_DURATION
+	var angle = progress * TAU  # Full rotation
+	
+	# Position along barrel roll path
+	var forward_offset = progress * barrel_speed * BARREL_DURATION
+	var lateral = cos(angle) * barrel_radius
+	var vertical = sin(angle) * barrel_radius
+	
+	var target_pos = barrel_start_pos + barrel_forward * forward_offset + barrel_left * lateral + barrel_up * vertical
+	
+	# Move drone to target position
+	var direction = (target_pos - drone.global_position).normalized()
+	drone.linear_velocity = direction * barrel_speed
+	
+	# Rotate drone around forward axis (barrel roll)
+	var rotation_basis = Basis.IDENTITY.rotated(barrel_forward, angle)
+	drone.global_transform.basis = barrel_start_basis * rotation_basis
+
 # Include the rest of your functions for autopilot and tricks here...
 
 func toggle_autopilot():
-	# Implement toggle autopilot as before
-	pass
+	if flight_state == FlightState.MANUAL:
+		flight_state = FlightState.AUTOPILOT
+		print("DroneControllerManager: Autopilot engaged")
+	else:
+		flight_state = FlightState.MANUAL
+		print("DroneControllerManager: Autopilot disengaged")
 
 func start_trick_loop(from_manual = true):
-	# Implement start_trick_loop as before
-	pass
+	if from_manual and flight_state == FlightState.MANUAL:
+		flight_state = FlightState.TRICK_LOOP
+		trick_time = 0.0
+		loop_start_pos = drone.global_position
+		loop_forward = -drone.global_transform.basis.z
+		loop_up = drone.global_transform.basis.y
+		loop_center = loop_start_pos + loop_forward * 5.0
+		print("DroneControllerManager: Loop trick started")
 
 func start_trick_barrel(from_manual = true):
-	# Implement start_trick_barrel as before
-	pass
+	if from_manual and flight_state == FlightState.MANUAL:
+		flight_state = FlightState.TRICK_BARREL
+		trick_time = 0.0
+		barrel_start_pos = drone.global_position
+		barrel_forward = -drone.global_transform.basis.z
+		barrel_up = drone.global_transform.basis.y
+		barrel_left = drone.global_transform.basis.x
+		barrel_start_basis = drone.global_transform.basis
+		print("DroneControllerManager: Barrel roll trick started")
+
+func toggle_swarm_mode():
+	swarm_mode = !swarm_mode
+	
+	if swarm_mode:
+		# Enter swarm mode
+		print("DroneControllerManager: Entering swarm mode")
+		cleanup()
+		
+		# Find or create swarm controller
+		swarm_controller = SwarmController.new()
+		get_parent().add_child(swarm_controller)
+		swarm_controller.initialize_swarm(10, Vector3(0, 5, 0))
+		
+	else:
+		# Exit swarm mode
+		print("DroneControllerManager: Exiting swarm mode")
+		if swarm_controller and is_instance_valid(swarm_controller):
+			swarm_controller.cleanup()
+			swarm_controller.queue_free()
+			swarm_controller = null
+		
+		# Respawn single drone
+		spawn_drone()
