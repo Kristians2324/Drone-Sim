@@ -11,12 +11,14 @@ W / S : Pitch Forward/Back
 A / D : Roll Left/Right
 Q / E : Yaw Rotate
 C : Switch Camera View
+H : Toggle Hover Mode
+V : Toggle Debug Mode
 R : Reset Level
 1-4 : Switch Environments
 5 : Toggle Autopilot (Track Flight)
 6 : Trigger Loop-de-Loop Trick
 7 : Trigger Barrel Roll Trick
-8 : Toggle Swarm (Boids Mode)"
+TAB : Toggle Swarm (Boids Mode)"
 
 const CONTROLLER_TEXT = "--- XBOX CONTROLLER ---
 LS Vertical : Thrust Up/Down

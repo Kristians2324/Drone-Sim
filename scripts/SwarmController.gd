@@ -2,7 +2,7 @@
 
 @export var drone_scene: PackedScene = preload("res://scenes/Drone.tscn")
 @export var swarm_count: int = 10
-@export var max_neighbours: int = 7
+@export var max_neighbours: int = 5
 
 var drones: Array[RigidBody3D] = []
 var active: bool = false
@@ -10,20 +10,25 @@ var active: bool = false
 var target_position: Vector3 = Vector3(0, 10, 0)
 var target_indicator: MeshInstance3D = null
 
+# Player input for swarm
+var player_throttle: float = 0.0
+var player_yaw: float = 0.0
+
 # Boids parameters
-var neighborhood_radius: float = 15.0
+var neighborhood_radius: float = 12.0
 var separation_radius: float = 4.0
-var cohesion_weight: float = 1.2
-var separation_weight: float = 2.5
-var alignment_weight: float = 1.0
-var target_weight: float = 3.0
-var ground_avoid_weight: float = 5.0
-var max_speed: float = 22.0
-var max_force: float = 15.0
+var cohesion_weight: float = 0.5
+var separation_weight: float = 4.0
+var alignment_weight: float = 0.3
+var target_weight: float = 5.0
+var ground_avoid_weight: float = 12.0
+var upward_bias_weight: float = 4.0
+var max_speed: float = 28.0
+var max_force: float = 25.0
 
 # Camera
 var camera: Camera3D = null
-var camera_smoothing: float = 3.0
+var camera_smoothing: float = 2.5
 
 func _ready():
 	target_indicator = MeshInstance3D.new()
@@ -43,12 +48,12 @@ func _ready():
 	add_child(camera)
 	camera.current = false
 
-func initialize_swarm(count: int = 10, spawn_pos: Vector3 = Vector3(0, 5, 0)):
+func initialize_swarm(count: int = 40, spawn_pos: Vector3 = Vector3(0, 15, 0)):
 	swarm_count = count
 	active = true
 	clear_swarm()
 
-	target_position = spawn_pos + Vector3(0, 5, 0)
+	target_position = spawn_pos + Vector3(0, 8, 0)
 	if target_indicator:
 		target_indicator.visible = true
 		target_indicator.global_position = target_position
@@ -57,19 +62,17 @@ func initialize_swarm(count: int = 10, spawn_pos: Vector3 = Vector3(0, 5, 0)):
 		var drone_inst = drone_scene.instantiate()
 		get_parent().add_child(drone_inst)
 		var offset = Vector3(
-			randf_range(-12.0, 12.0),
-			randf_range(5.0, 15.0),
-			randf_range(-12.0, 12.0)
+			randf_range(-10.0, 10.0),
+			randf_range(8.0, 15.0),
+			randf_range(-10.0, 10.0)
 		)
 		drone_inst.global_position = spawn_pos + offset
-		if drone_inst.show_rig:
-			drone_inst.show_rig.configure(i, swarm_count, false)
 		drones.append(drone_inst)
 
 	if camera:
 		camera.current = true
 		var center = get_swarm_centroid()
-		camera.global_position = center + Vector3(0, 18, 30)
+		camera.global_position = center + Vector3(0, 12, 20)
 		camera.look_at(center, Vector3.UP)
 
 	print("SwarmController: Swarm initialized with ", drones.size(), " drones at ", spawn_pos)
@@ -92,18 +95,31 @@ func cleanup():
 func _process(delta):
 	if not active or drones.size() == 0:
 		return
-	var input_dir = Vector3(
-		Input.get_axis("move_left", "move_right"),
-		Input.get_axis("throttle_down", "throttle_up"),
-		Input.get_axis("move_back", "move_forward")
-	)
-	target_position += input_dir * (delta * 18.0)
+	
+	# Get input using same actions as drone
+	player_throttle = Input.get_axis("throttle_down", "throttle_up")
+	player_yaw = Input.get_axis("turn_left", "turn_right")
+	var pitch_input = Input.get_axis("move_back", "move_forward")
+	var roll_input = Input.get_axis("move_left", "move_right")
+	
+	# Move target position with input
+	if player_throttle != 0.0 or pitch_input != 0.0 or roll_input != 0.0:
+		target_position += Vector3(
+			roll_input * 20.0,
+			player_throttle * 20.0,
+			pitch_input * 20.0
+		) * delta
+	
 	if target_indicator:
 		target_indicator.global_position = target_position
+	
 	var centroid = get_swarm_centroid()
-	var target_cam_pos = centroid + Vector3(0, 20, 35)
-	if camera and camera.current:
-		camera.global_position = camera.global_position.lerp(target_cam_pos, delta * camera_smoothing)
+	
+	# Camera follows swarm like single drone mode - from behind and above
+	var target_cam_pos = centroid + Vector3(0, 14, 22)
+	
+	if camera and is_instance_valid(camera) and camera.current:
+		camera.global_position = camera.global_position.lerp(target_cam_pos, delta * 2.0)
 		camera.look_at(centroid, Vector3.UP)
 
 func _physics_process(delta):
@@ -192,33 +208,42 @@ func _physics_process(delta):
 
 		var steer_ground = Vector3.ZERO
 		var terrain_height = get_terrain_height_at(pos)
-		var min_height_above_ground = 7.0
+		var min_height_above_ground = 10.0
 		if pos.y < terrain_height + min_height_above_ground:
 			var desired_up = Vector3(vel.x, max_speed, vel.z).normalized() * max_speed
 			var correction_depth = (terrain_height + min_height_above_ground) - pos.y
 			var scale_factor = clamp(1.0 + (correction_depth / 2.0), 1.0, 3.0)
 			steer_ground = (desired_up - vel).limit_length(max_force * scale_factor)
 
+		# Upward bias to keep swarm flying
+		var steer_upward = Vector3(0, max_speed * 1.5, 0)
+		steer_upward = (steer_upward - vel).limit_length(max_force)
+
 		var total_force = (
 			steer_cohesion * cohesion_weight +
 			steer_separation * separation_weight +
 			steer_alignment * alignment_weight +
 			steer_target * target_weight +
-			steer_ground * ground_avoid_weight
+			steer_ground * ground_avoid_weight +
+			steer_upward * upward_bias_weight
 		)
 
 		var local_force = drone_inst.global_transform.basis.inverse() * total_force
-		var throttle = clamp(0.5 + total_force.y * 0.05, 0.0, 1.0)
-		var yaw = 0.0
+		
+		# Use player throttle as base, plus boid vertical forces - higher minimum throttle
+		var throttle = clamp(0.55 + player_throttle * 0.3 + total_force.y * 0.05, 0.45, 1.0)
+		
+		# Use player yaw input
+		var yaw = clamp(player_yaw * 1.5, -1.0, 1.0)
 
-		if vel.length_squared() > 1.0:
+		if vel.length_squared() > 0.5:
 			var target_dir = vel.normalized()
 			var current_dir = -drone_inst.global_transform.basis.z
 			var angle = current_dir.signed_angle_to(target_dir, Vector3.UP)
-			yaw = clamp(angle * 1.5, -1.0, 1.0)
+			yaw += clamp(angle * 0.8, -0.5, 0.5)  # Add some auto-correction
 
-		var pitch = clamp(-local_force.z * 0.05, -1.0, 1.0)
-		var roll = clamp(local_force.x * 0.05, -1.0, 1.0)
+		var pitch = clamp(-local_force.z * 0.10, -1.0, 1.0)
+		var roll = clamp(local_force.x * 0.10, -1.0, 1.0)
 
 		drone_inst.set_input_vector(Vector4(throttle, yaw, pitch, roll))
 
