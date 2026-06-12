@@ -8,9 +8,13 @@
 [ext_resource type="Script" uid="uid://c6lka6p8q7r1s" path="res://scripts/TownGenerator.gd" id="8_town"]
 [ext_resource type="PackedScene" uid="uid://br1evmd5douej" path="res://foosTable.gltf" id="9_foos"]
 [ext_resource type="Script" path="res://scripts/DroneControllerManager.gd" id="10_dcm"]
+[ext_resource type="Script" path="res://scripts/DebugOverlay.gd" id="11_dbg"]
 
 [node name="Main" type="Node3D" unique_id=383992290]
 script = ExtResource("5_wm")
 
 [node name="DroneControllerManager" type="Node3D" parent="."]
 script = ExtResource("10_dcm")
+
+[node name="DebugOverlay" type="CanvasLayer" parent="."]
+script = ExtResource("11_dbg")

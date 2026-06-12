@@ -1,87 +1,65 @@
-﻿extends Node3D
+extends Node3D
 
 @export var drone_scene: PackedScene = preload("res://scenes/Drone.tscn")
-@export var swarm_count: int = 10
-@export var max_neighbours: int = 5
+@export var swarm_count: int = 39
 
 var drones: Array[RigidBody3D] = []
+var leader_drone: RigidBody3D = null
 var active: bool = false
 
-var target_position: Vector3 = Vector3(0, 10, 0)
-var target_indicator: MeshInstance3D = null
-
-# Player input for swarm
-var player_throttle: float = 0.0
-var player_yaw: float = 0.0
+var target_position: Vector3 = Vector3.ZERO
 
 # Boids parameters
 var neighborhood_radius: float = 12.0
-var separation_radius: float = 4.0
-var cohesion_weight: float = 0.5
-var separation_weight: float = 4.0
-var alignment_weight: float = 0.3
-var target_weight: float = 5.0
+var separation_radius: float = 4.5
+var cohesion_weight: float = 0.8
+var separation_weight: float = 6.0
+var alignment_weight: float = 0.4
+var target_weight: float = 7.0 # High weight to keep them aligned to the leader
 var ground_avoid_weight: float = 12.0
-var upward_bias_weight: float = 4.0
-var max_speed: float = 28.0
-var max_force: float = 25.0
-
-# Camera
-var camera: Camera3D = null
-var camera_smoothing: float = 2.5
+var upward_bias_weight: float = 2.0
+var max_speed: float = 35.0 # Fast so they can catch up
+var max_force: float = 30.0 # High force to avoid lag
 
 func _ready():
-	target_indicator = MeshInstance3D.new()
-	var sphere = SphereMesh.new()
-	sphere.radius = 0.4
-	sphere.height = 0.8
-	target_indicator.mesh = sphere
-	var mat = StandardMaterial3D.new()
-	mat.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
-	mat.albedo_color = Color(1.0, 0.5, 0.0, 0.8)
-	mat.transparency = StandardMaterial3D.TRANSPARENCY_ALPHA
-	target_indicator.material_override = mat
-	add_child(target_indicator)
-	target_indicator.visible = false
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 
-	camera = Camera3D.new()
-	add_child(camera)
-	camera.current = false
-
-func initialize_swarm(count: int = 40, spawn_pos: Vector3 = Vector3(0, 15, 0)):
+func initialize_swarm(leader: RigidBody3D, count: int = 39, spawn_pos: Vector3 = Vector3(0, 15, 0)):
+	clear_swarm()
+	leader_drone = leader
 	swarm_count = count
 	active = true
-	clear_swarm()
 
-	target_position = spawn_pos + Vector3(0, 8, 0)
-	if target_indicator:
-		target_indicator.visible = true
-		target_indicator.global_position = target_position
+	target_position = spawn_pos
 
 	for i in range(swarm_count):
 		var drone_inst = drone_scene.instantiate()
 		get_parent().add_child(drone_inst)
+		
+		# Spawn followers in a sphere shell around the leader
+		var angle1 = randf() * TAU
+		var angle2 = randf() * PI
+		var r = randf_range(4.0, 12.0)
 		var offset = Vector3(
-			randf_range(-10.0, 10.0),
-			randf_range(8.0, 15.0),
-			randf_range(-10.0, 10.0)
+			r * sin(angle2) * cos(angle1),
+			r * cos(angle2) + 2.0, # slight offset upwards
+			r * sin(angle2) * sin(angle1)
 		)
 		drone_inst.global_position = spawn_pos + offset
+		
+		# Disable physics collisions with other drones (only collide with Environment on Layer 1)
+		drone_inst.collision_layer = 4
+		drone_inst.collision_mask = 1
+		
+		# Configure light rig for show colors
+		if drone_inst.has_method("setup_show_lights") and drone_inst.get("show_rig") != null:
+			drone_inst.show_rig.configure(i, swarm_count, false)
+			
 		drones.append(drone_inst)
 
-	if camera:
-		camera.current = true
-		var center = get_swarm_centroid()
-		camera.global_position = center + Vector3(0, 12, 20)
-		camera.look_at(center, Vector3.UP)
-
-	print("SwarmController: Swarm initialized with ", drones.size(), " drones at ", spawn_pos)
+	print("SwarmController: Swarm initialized with ", drones.size(), " follower drones.")
 
 func clear_swarm():
-	if camera:
-		camera.current = false
-	if target_indicator:
-		target_indicator.visible = false
 	for d in drones:
 		if d and is_instance_valid(d):
 			d.queue_free()
@@ -92,57 +70,39 @@ func clear_swarm():
 func cleanup():
 	clear_swarm()
 
-func _process(delta):
-	if not active or drones.size() == 0:
-		return
-	
-	# Get input using same actions as drone
-	player_throttle = Input.get_axis("throttle_down", "throttle_up")
-	player_yaw = Input.get_axis("turn_left", "turn_right")
-	var pitch_input = Input.get_axis("move_back", "move_forward")
-	var roll_input = Input.get_axis("move_left", "move_right")
-	
-	# Move target position with input
-	if player_throttle != 0.0 or pitch_input != 0.0 or roll_input != 0.0:
-		target_position += Vector3(
-			roll_input * 20.0,
-			player_throttle * 20.0,
-			pitch_input * 20.0
-		) * delta
-	
-	if target_indicator:
-		target_indicator.global_position = target_position
-	
-	var centroid = get_swarm_centroid()
-	
-	# Camera follows swarm like single drone mode - from behind and above
-	var target_cam_pos = centroid + Vector3(0, 14, 22)
-	
-	if camera and is_instance_valid(camera) and camera.current:
-		camera.global_position = camera.global_position.lerp(target_cam_pos, delta * 2.0)
-		camera.look_at(centroid, Vector3.UP)
-
 func _physics_process(delta):
-	if not active or drones.size() == 0:
+	if not active or drones.size() == 0 or not leader_drone or not is_instance_valid(leader_drone):
 		return
 
+	# Pre-calculate global centroid and average velocity of the entire swarm (including leader)
+	var centroid = get_swarm_centroid()
+	var avg_velocity = get_swarm_average_velocity()
+
+	# Retrieve positions and velocities of all drones
 	var positions: Array[Vector3] = []
 	var velocities: Array[Vector3] = []
+	var valids: Array[bool] = []
 	positions.resize(drones.size())
 	velocities.resize(drones.size())
+	valids.resize(drones.size())
 
 	for i in range(drones.size()):
 		var d = drones[i]
 		if d and is_instance_valid(d):
 			positions[i] = d.global_position
 			velocities[i] = d.linear_velocity
+			valids[i] = true
 		else:
 			positions[i] = Vector3.ZERO
 			velocities[i] = Vector3.ZERO
+			valids[i] = false
+
+	var leader_pos = leader_drone.global_position
+	var leader_vel = leader_drone.linear_velocity
 
 	for i in range(drones.size()):
 		var drone_inst = drones[i]
-		if not drone_inst or not is_instance_valid(drone_inst):
+		if not drone_inst or not is_instance_valid(drone_inst) or not valids[i]:
 			continue
 
 		var pos = positions[i]
@@ -151,74 +111,66 @@ func _physics_process(delta):
 		var steer_cohesion = Vector3.ZERO
 		var steer_separation = Vector3.ZERO
 		var steer_alignment = Vector3.ZERO
-		var cohesion_center = Vector3.ZERO
-		var alignment_vel = Vector3.ZERO
-		var cohesion_count = 0
-		var separation_count = 0
-		var alignment_count = 0
-
-		# Nearest-neighbour culling: only consider closest max_neighbours within radius
-		var neighbour_entries: Array = []
-		var nr_sq = neighborhood_radius * neighborhood_radius
-		for j in range(drones.size()):
-			if i == j:
-				continue
-			var d_sq = pos.distance_squared_to(positions[j])
-			if d_sq < nr_sq:
-				neighbour_entries.append([d_sq, j])
-		neighbour_entries.sort_custom(func(a, b): return a[0] < b[0])
-		var neighbours = neighbour_entries.slice(0, max_neighbours)
-
-		for entry in neighbours:
-			var j = entry[1]
-			var other_pos = positions[j]
-			var other_vel = velocities[j]
-			var dist = sqrt(entry[0])
-
-			cohesion_center += other_pos
-			cohesion_count += 1
-			alignment_vel += other_vel
-			alignment_count += 1
-
-			if dist < separation_radius and dist > 0.001:
-				var diff = (pos - other_pos).normalized() / dist
-				steer_separation += diff
-				separation_count += 1
-
-		if cohesion_count > 0:
-			cohesion_center /= cohesion_count
-			var desired = (cohesion_center - pos).normalized() * max_speed
-			steer_cohesion = (desired - vel).limit_length(max_force)
-
-		if alignment_count > 0:
-			alignment_vel /= alignment_count
-			var desired = alignment_vel.normalized() * max_speed
-			steer_alignment = (desired - vel).limit_length(max_force)
-
-		if separation_count > 0:
-			steer_separation /= separation_count
-			var desired = steer_separation.normalized() * max_speed
-			steer_separation = (desired - vel).limit_length(max_force)
-
-		var dist_to_target = pos.distance_to(target_position)
 		var steer_target = Vector3.ZERO
-		if dist_to_target > 0.001:
-			var desired = (target_position - pos).normalized() * max_speed
-			steer_target = (desired - vel).limit_length(max_force)
-
 		var steer_ground = Vector3.ZERO
+		var steer_upward = Vector3.ZERO
+
+		# 1. OPTIMIZED SEPARATION: only calculate against the single closest neighbor
+		var closest_dist_sq = 999999.0
+		var closest_pos = Vector3.ZERO
+
+		# Check against leader drone
+		var d_leader_sq = pos.distance_squared_to(leader_pos)
+		if d_leader_sq < closest_dist_sq:
+			closest_dist_sq = d_leader_sq
+			closest_pos = leader_pos
+
+		# Check against other follower drones
+		for j in range(drones.size()):
+			if i == j or not valids[j]:
+				continue
+			var other_pos = positions[j]
+			var d_sq = pos.distance_squared_to(other_pos)
+			if d_sq < closest_dist_sq:
+				closest_dist_sq = d_sq
+				closest_pos = other_pos
+
+		var closest_dist = sqrt(closest_dist_sq)
+		if closest_dist < separation_radius and closest_dist > 0.001:
+			var desired_sep = (pos - closest_pos).normalized() * max_speed
+			# Separation force gets stronger the closer they are
+			var dist_factor = clamp((separation_radius - closest_dist) / separation_radius, 0.1, 1.0)
+			steer_separation = (desired_sep - vel).limit_length(max_force * dist_factor * 1.5)
+
+		# 2. COHESION: seek global centroid
+		var desired_coh = (centroid - pos).normalized() * max_speed
+		steer_cohesion = (desired_coh - vel).limit_length(max_force)
+
+		# 3. ALIGNMENT: align velocity with average swarm velocity
+		if avg_velocity.length_squared() > 0.01:
+			var desired_align = avg_velocity.normalized() * max_speed
+			steer_alignment = (desired_align - vel).limit_length(max_force)
+
+		# 4. ZERO-LAG TARGET SEEKING: velocity matching + positional correction
+		var correction = (leader_pos - pos) * 3.0 # proportional pull towards leader
+		var desired_tgt = leader_vel + correction
+		desired_tgt = desired_tgt.limit_length(max_speed)
+		steer_target = (desired_tgt - vel).limit_length(max_force)
+
+		# 5. GROUND AVOIDANCE
 		var terrain_height = get_terrain_height_at(pos)
-		var min_height_above_ground = 10.0
+		var min_height_above_ground = 8.0
 		if pos.y < terrain_height + min_height_above_ground:
 			var desired_up = Vector3(vel.x, max_speed, vel.z).normalized() * max_speed
 			var correction_depth = (terrain_height + min_height_above_ground) - pos.y
-			var scale_factor = clamp(1.0 + (correction_depth / 2.0), 1.0, 3.0)
+			var scale_factor = clamp(1.0 + (correction_depth / 2.0), 1.0, 3.5)
 			steer_ground = (desired_up - vel).limit_length(max_force * scale_factor)
 
-		# Upward bias to keep swarm flying
-		var steer_upward = Vector3(0, max_speed * 1.5, 0)
-		steer_upward = (steer_upward - vel).limit_length(max_force)
+		# 6. UPWARD BIAS (keep drones airborne if they drift too low)
+		var steer_up = Vector3(0, max_speed * 0.8, 0)
+		steer_upward = (steer_up - vel).limit_length(max_force)
 
+		# Combine steering forces
 		var total_force = (
 			steer_cohesion * cohesion_weight +
 			steer_separation * separation_weight +
@@ -228,20 +180,22 @@ func _physics_process(delta):
 			steer_upward * upward_bias_weight
 		)
 
+		# Translate total_force to local drone coordinates for control mapping
 		var local_force = drone_inst.global_transform.basis.inverse() * total_force
-		
-		# Use player throttle as base, plus boid vertical forces - higher minimum throttle
-		var throttle = clamp(0.55 + player_throttle * 0.3 + total_force.y * 0.05, 0.45, 1.0)
-		
-		# Use player yaw input
-		var yaw = clamp(player_yaw * 1.5, -1.0, 1.0)
 
+		# Map local forces to input vector:
+		# throttle (x), yaw (y), pitch (z), roll (w)
+		var throttle = clamp(0.55 + total_force.y * 0.05, 0.35, 1.0)
+		
+		# Auto-yaw towards flight direction
+		var yaw = 0.0
 		if vel.length_squared() > 0.5:
 			var target_dir = vel.normalized()
 			var current_dir = -drone_inst.global_transform.basis.z
 			var angle = current_dir.signed_angle_to(target_dir, Vector3.UP)
-			yaw += clamp(angle * 0.8, -0.5, 0.5)  # Add some auto-correction
+			yaw = clamp(angle * 1.2, -1.0, 1.0)
 
+		# Pitch and roll tilts the drone in the direction of the force
 		var pitch = clamp(-local_force.z * 0.10, -1.0, 1.0)
 		var roll = clamp(local_force.x * 0.10, -1.0, 1.0)
 
@@ -254,11 +208,16 @@ func get_terrain_height_at(pos: Vector3) -> float:
 	var from = Vector3(pos.x, 300.0, pos.z)
 	var to = Vector3(pos.x, -50.0, pos.z)
 	var query = PhysicsRayQueryParameters3D.create(from, to)
+	
+	# Exclude leader and all swarm drones to prevent raycast collision with itself/each other
 	var exclude_list = []
+	if leader_drone and is_instance_valid(leader_drone):
+		exclude_list.append(leader_drone.get_rid())
 	for d in drones:
 		if d and is_instance_valid(d):
 			exclude_list.append(d.get_rid())
 	query.exclude = exclude_list
+
 	var result = space_state.intersect_ray(query)
 	if result.has("position"):
 		return result.position.y
@@ -267,6 +226,9 @@ func get_terrain_height_at(pos: Vector3) -> float:
 func get_swarm_centroid() -> Vector3:
 	var center = Vector3.ZERO
 	var count = 0
+	if leader_drone and is_instance_valid(leader_drone):
+		center += leader_drone.global_position
+		count += 1
 	for d in drones:
 		if d and is_instance_valid(d):
 			center += d.global_position
@@ -274,3 +236,17 @@ func get_swarm_centroid() -> Vector3:
 	if count > 0:
 		return center / count
 	return target_position
+
+func get_swarm_average_velocity() -> Vector3:
+	var avg_vel = Vector3.ZERO
+	var count = 0
+	if leader_drone and is_instance_valid(leader_drone):
+		avg_vel += leader_drone.linear_velocity
+		count += 1
+	for d in drones:
+		if d and is_instance_valid(d):
+			avg_vel += d.linear_velocity
+			count += 1
+	if count > 0:
+		return avg_vel / count
+	return Vector3.ZERO

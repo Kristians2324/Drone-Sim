@@ -13,6 +13,7 @@ const HOVER_MAX_HOLD_FORCE = 90.0
 
 var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 var hover_enabled = false
+var speed_multiplier: float = 1.0
 
 # Audio Variables
 var motor_audio: AudioStreamPlayer3D
@@ -21,6 +22,15 @@ var crash_audio: AudioStreamPlayer3D
 var crash_playback: AudioStreamGeneratorPlayback
 var audio_hz = 44100.0
 var motor_phase = 0.0
+
+func set_swarm_mode_active(active: bool):
+	speed_multiplier = 1.6 if active else 1.0
+	if is_instance_valid(design):
+		design.visible = !active
+	if is_instance_valid(show_rig):
+		show_rig.visible = !active
+	if is_instance_valid(motor_audio):
+		motor_audio.volume_db = -80.0 if active else 0.0
 
 @onready var design = $Design
 @onready var collision_shape: CollisionShape3D = $Collision
@@ -195,9 +205,9 @@ func _apply_input_forces(delta, input_vec: Vector4):
 		if not strafe_dir.is_zero_approx():
 			strafe_dir = strafe_dir.normalized()
 
-	var vertical_thrust = local_up * smoothed_input_internal.x * THROTTLE_POWER
-	var forward_force = forward_dir * smoothed_input_internal.z * FORWARD_POWER
-	var strafe_force = strafe_dir * smoothed_input_internal.w * FORWARD_POWER
+	var vertical_thrust = local_up * smoothed_input_internal.x * THROTTLE_POWER * speed_multiplier
+	var forward_force = forward_dir * smoothed_input_internal.z * FORWARD_POWER * speed_multiplier
+	var strafe_force = strafe_dir * smoothed_input_internal.w * FORWARD_POWER * speed_multiplier
 
 	apply_central_force(vertical_thrust + forward_force + strafe_force)
 
@@ -217,9 +227,9 @@ func _apply_input_forces(delta, input_vec: Vector4):
 					hover_force = clamp(hover_force, 0.0, HOVER_MAX_HOLD_FORCE)
 					apply_central_force(Vector3.UP * hover_force)
 
-	apply_torque(global_transform.basis.x * -smoothed_input_internal.z * TURN_POWER)
-	apply_torque(global_transform.basis.z * -smoothed_input_internal.w * TURN_POWER)
-	apply_torque(global_transform.basis.y * -smoothed_input_internal.y * TURN_POWER)
+	apply_torque(global_transform.basis.x * -smoothed_input_internal.z * TURN_POWER * speed_multiplier)
+	apply_torque(global_transform.basis.z * -smoothed_input_internal.w * TURN_POWER * speed_multiplier)
+	apply_torque(global_transform.basis.y * -smoothed_input_internal.y * TURN_POWER * speed_multiplier)
 
 	var up = global_transform.basis.y
 	var correction = up.cross(Vector3.UP)
@@ -278,6 +288,8 @@ func setup_drone_audio():
 	crash_playback = crash_audio.get_stream_playback()
 
 func _on_drone_collision(_body):
+	if _body and _body.has_method("set_input_vector"):
+		return
 	var impact = linear_velocity.length()
 	if impact > 1.5: 
 		play_crash_sound(impact)

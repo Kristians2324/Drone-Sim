@@ -1,4 +1,4 @@
-﻿extends Node3D
+extends Node3D
 
 @export var drone_scene: PackedScene = preload("res://scenes/Drone.tscn")
 var drone: RigidBody3D = null
@@ -49,6 +49,8 @@ var barrel_speed = 20.0
 var barrel_radius = 2.0
 
 var post_trick_state = FlightState.MANUAL
+
+
 
 func _ready():
 	spring_arm = SpringArm3D.new()
@@ -104,9 +106,6 @@ func _process(delta):
 		toggle_swarm_mode()
 		return  # Skip other processing when toggling
 
-	if swarm_mode:
-		return
-	
 	if not drone or not is_instance_valid(drone):
 		return
 
@@ -135,7 +134,10 @@ func _process(delta):
 
 	if spring_arm and is_instance_valid(spring_arm) and spring_arm.is_inside_tree():
 		if drone and is_instance_valid(drone) and drone.is_inside_tree():
-			spring_arm.global_position = drone.global_position + Vector3(0, 0.5, 0)
+			var follow_pos = drone.global_position
+			if swarm_mode and swarm_controller and is_instance_valid(swarm_controller) and swarm_controller.has_method("get_swarm_centroid"):
+				follow_pos = swarm_controller.get_swarm_centroid()
+			spring_arm.global_position = follow_pos + Vector3(0, 0.5, 0)
 			spring_arm.global_transform.basis = drone.global_transform.basis
 			spring_arm.rotate_object_local(Vector3.RIGHT, deg_to_rad(-20))
 
@@ -146,8 +148,6 @@ func _process(delta):
 			fp_camera.global_transform.basis = drone.global_transform.basis.rotated(drone.global_transform.basis.x, deg_to_rad(15))
 
 func _physics_process(delta):
-	if swarm_mode:
-		return
 	if not drone or not is_instance_valid(drone):
 		return
 
@@ -339,6 +339,8 @@ func process_trick_barrel(delta):
 	drone.linear_velocity = barrel_forward * barrel_speed + barrel_left * barrel_radius * (2.0 * PI / BARREL_DURATION) * cos(phi) + barrel_up * barrel_radius * (2.0 * PI / BARREL_DURATION) * sin(phi)
 	drone.angular_velocity = barrel_forward * (2.0 * PI / BARREL_DURATION)
 
+
+
 func toggle_swarm_mode():
 	if swarm_mode:
 		disable_swarm_mode()
@@ -349,10 +351,14 @@ func enable_swarm_mode():
 	print("DroneControllerManager: Enabling Swarm Mode...")
 	swarm_mode = true
 	
-	# Disable single drone controller
-	if drone and is_instance_valid(drone):
-		drone.queue_free()
-		drone = null
+	if not drone or not is_instance_valid(drone):
+		spawn_drone()
+	
+	if drone:
+		if drone.has_method("set_swarm_mode_active"):
+			drone.set_swarm_mode_active(true)
+		drone.collision_layer = 2
+		drone.collision_mask = 1
 	
 	# Create swarm controller
 	if not swarm_controller or not is_instance_valid(swarm_controller):
@@ -361,28 +367,32 @@ func enable_swarm_mode():
 		swarm_controller.set_script(preload("res://scripts/SwarmController.gd"))
 		get_parent().add_child(swarm_controller)
 	
-	# Initialize swarm with 40 drones for a large visible swarm
+	# Initialize swarm with follower drones, passing player drone as the leader target
 	if swarm_controller and swarm_controller.has_method("initialize_swarm"):
-		swarm_controller.initialize_swarm(40, Vector3(0, 15, 0))
+		swarm_controller.initialize_swarm(drone, 39, drone.global_position)
 	
+	update_camera_views()
 	print("DroneControllerManager: Swarm mode enabled!")
 
 func disable_swarm_mode():
 	print("DroneControllerManager: Disabling Swarm Mode...")
 	swarm_mode = false
 	
-	# Get last swarm position if available
-	var spawn_location = Vector3(0, 15, 0)
+	if drone and is_instance_valid(drone):
+		if drone.has_method("set_swarm_mode_active"):
+			drone.set_swarm_mode_active(false)
+		drone.collision_layer = 1
+		drone.collision_mask = 1
+	
+	# Cleanup swarm controller
 	if swarm_controller and is_instance_valid(swarm_controller):
-		spawn_location = swarm_controller.get_swarm_centroid()
 		if swarm_controller.has_method("cleanup"):
 			swarm_controller.cleanup()
 		swarm_controller.queue_free()
 		swarm_controller = null
 	
-	# Re-enable single drone at swarm location
-	spawn_drone()
-	if drone and is_instance_valid(drone):
-		drone.global_position = spawn_location
-	
+	if not drone or not is_instance_valid(drone):
+		spawn_drone()
+		
+	update_camera_views()
 	print("DroneControllerManager: Swarm mode disabled!")
