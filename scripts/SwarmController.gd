@@ -8,6 +8,10 @@ var leader_drone: RigidBody3D = null
 var active: bool = false
 
 var target_position: Vector3 = Vector3.ZERO
+var formation_targets: Array[Vector3] = []
+var formation_active: bool = false
+var formation_hold_altitude: float = 40.0
+var formation_arrival_radius: float = 2.0
 
 # Boids parameters
 var neighborhood_radius: float = 12.0
@@ -29,6 +33,8 @@ func initialize_swarm(leader: RigidBody3D, count: int = 39, spawn_pos: Vector3 =
 	leader_drone = leader
 	swarm_count = count
 	active = true
+	formation_active = false
+	formation_targets.clear()
 
 	target_position = spawn_pos
 
@@ -59,6 +65,27 @@ func initialize_swarm(leader: RigidBody3D, count: int = 39, spawn_pos: Vector3 =
 
 	print("SwarmController: Swarm initialized with ", drones.size(), " follower drones.")
 
+func initialize_formation(leader: RigidBody3D, targets: Array[Vector3], spawn_pos: Vector3 = Vector3(0, 15, 0)):
+	clear_swarm()
+	leader_drone = leader
+	swarm_count = targets.size()
+	active = true
+	formation_active = true
+	formation_targets = targets.duplicate()
+	target_position = spawn_pos
+
+	for i in range(swarm_count):
+		var drone_inst: RigidBody3D = drone_scene.instantiate()
+		get_parent().add_child(drone_inst)
+		drone_inst.global_position = spawn_pos + Vector3(randf_range(-2.0, 2.0), randf_range(0.0, 2.0), randf_range(-2.0, 2.0))
+		drone_inst.collision_layer = 4
+		drone_inst.collision_mask = 1
+		if drone_inst.has_method("setup_show_lights") and drone_inst.get("show_rig") != null:
+			drone_inst.show_rig.configure(i, swarm_count, false)
+		drones.append(drone_inst)
+
+	print("SwarmController: Formation initialized with ", drones.size(), " drones.")
+
 func clear_swarm():
 	for d in drones:
 		if d and is_instance_valid(d):
@@ -72,6 +99,10 @@ func cleanup():
 
 func _physics_process(delta):
 	if not active or drones.size() == 0 or not leader_drone or not is_instance_valid(leader_drone):
+		return
+
+	if formation_active:
+		_process_formation(delta)
 		return
 
 	# Pre-calculate global centroid and average velocity of the entire swarm (including leader)
@@ -200,6 +231,45 @@ func _physics_process(delta):
 		var roll = clamp(local_force.x * 0.10, -1.0, 1.0)
 
 		drone_inst.set_input_vector(Vector4(throttle, yaw, pitch, roll))
+
+func _process_formation(delta: float) -> void:
+	var formation_count: int = min(drones.size(), formation_targets.size())
+	if formation_count == 0:
+		return
+
+	for i in range(formation_count):
+		var drone_inst: RigidBody3D = drones[i]
+		if not drone_inst or not is_instance_valid(drone_inst):
+			continue
+
+		var target_pos: Vector3 = formation_targets[i]
+		var pos: Vector3 = drone_inst.global_position
+		var vel: Vector3 = drone_inst.linear_velocity
+		var to_target: Vector3 = target_pos - pos
+		var dist: float = to_target.length()
+
+		# Lift first, then hold formation with minimal motion.
+		var desired_up: float = 0.5
+		if pos.y < formation_hold_altitude - 1.0:
+			desired_up = 1.0
+		elif dist > formation_arrival_radius:
+			desired_up = 0.65
+
+		var horizontal_dir: Vector3 = Vector3(to_target.x, 0.0, to_target.z)
+		var forward_drive: float = 0.0
+		if horizontal_dir.length_squared() > 0.01:
+			forward_drive = clamp(horizontal_dir.length() * 0.04, -0.35, 0.35)
+
+		var local_force: Vector3 = drone_inst.global_transform.basis.inverse() * to_target
+		var pitch: float = clamp(-local_force.z * 0.04, -0.45, 0.45)
+		var roll: float = clamp(local_force.x * 0.04, -0.45, 0.45)
+		var yaw: float = 0.0
+		if vel.length_squared() > 0.5:
+			var target_dir: Vector3 = vel.normalized()
+			var current_dir: Vector3 = -drone_inst.global_transform.basis.z
+			yaw = clamp(current_dir.signed_angle_to(target_dir, Vector3.UP) * 0.6, -0.4, 0.4)
+
+		drone_inst.set_input_vector(Vector4(desired_up, yaw, pitch, roll))
 
 func get_terrain_height_at(pos: Vector3) -> float:
 	var space_state = get_world_3d().direct_space_state

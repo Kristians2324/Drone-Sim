@@ -14,9 +14,16 @@ var state_toggle_cooldown: float = 0.0
 var spring_arm: SpringArm3D
 var tp_camera: Camera3D
 var fp_camera: Camera3D
+var show_camera_rig: Node3D
+var show_camera: Camera3D
+var show_camera_active: bool = false
 
 enum FlightState { MANUAL, AUTOPILOT, TRICK_LOOP, TRICK_BARREL }
 var flight_state = FlightState.MANUAL
+
+enum ShowMode { NONE, STAR_FORMATION }
+var show_mode = ShowMode.NONE
+var show_controller: Node3D = null
 
 var autopilot_waypoints: Array[Vector3] = [
 	Vector3(0, 15, 0),
@@ -48,6 +55,14 @@ var barrel_start_basis = Basis.IDENTITY
 var barrel_speed = 20.0
 var barrel_radius = 2.0
 
+var show_target_positions: Array[Vector3] = []
+var show_altitude: float = 40.0
+var show_center: Vector3 = Vector3.ZERO
+var show_form_up_speed: float = 14.0
+var show_form_hold_speed: float = 6.0
+var show_form_spread: float = 18.0
+var show_formation_radius: float = 20.0
+
 var post_trick_state = FlightState.MANUAL
 
 
@@ -62,6 +77,17 @@ func _ready():
 
 	fp_camera = Camera3D.new()
 	add_child(fp_camera)
+
+	show_camera_rig = Node3D.new()
+	show_camera_rig.name = "ShowCameraRig"
+	add_child(show_camera_rig)
+
+	show_camera = Camera3D.new()
+	show_camera.current = false
+	show_camera_rig.add_child(show_camera)
+	show_camera.position = Vector3(0, 18, 32)
+	show_camera.look_at(Vector3.ZERO, Vector3.UP)
+
 	drone_input = preload("res://scripts/drone/DroneInput.gd").new()
 	drone_input.initialize(3.5)
 
@@ -81,6 +107,7 @@ func spawn_drone():
 func cleanup():
 	if tp_camera: tp_camera.current = false
 	if fp_camera: fp_camera.current = false
+	if show_camera: show_camera.current = false
 	if drone and is_instance_valid(drone):
 		drone.queue_free()
 		drone = null
@@ -93,8 +120,19 @@ func cleanup():
 
 func update_camera_views():
 	if not drone or not is_instance_valid(drone): return
-	tp_camera.current = !is_first_person
-	fp_camera.current = is_first_person
+	show_camera_active = show_mode == ShowMode.STAR_FORMATION
+	if show_camera_active:
+		tp_camera.current = false
+		fp_camera.current = false
+		show_camera.current = true
+	elif is_first_person:
+		tp_camera.current = false
+		fp_camera.current = true
+		show_camera.current = false
+	else:
+		tp_camera.current = true
+		fp_camera.current = false
+		show_camera.current = false
 
 func _process(delta):
 	if camera_toggle_cooldown > 0: camera_toggle_cooldown -= delta
@@ -120,6 +158,10 @@ func _process(delta):
 		drone.apply_hover_mode()
 		print("DroneControllerManager: Hover mode ", "enabled" if drone.hover_enabled else "disabled")
 
+	if Input.is_key_pressed(KEY_M) and state_toggle_cooldown <= 0:
+		state_toggle_cooldown = 0.5
+		toggle_show_mode()
+
 	if Input.is_key_pressed(KEY_5) and state_toggle_cooldown <= 0:
 		state_toggle_cooldown = 0.3
 		toggle_autopilot()
@@ -137,9 +179,14 @@ func _process(delta):
 			var follow_pos = drone.global_position
 			if swarm_mode and swarm_controller and is_instance_valid(swarm_controller) and swarm_controller.has_method("get_swarm_centroid"):
 				follow_pos = swarm_controller.get_swarm_centroid()
+			elif show_mode == ShowMode.STAR_FORMATION:
+				follow_pos = show_center
 			spring_arm.global_position = follow_pos + Vector3(0, 0.5, 0)
 			spring_arm.global_transform.basis = drone.global_transform.basis
 			spring_arm.rotate_object_local(Vector3.RIGHT, deg_to_rad(-20))
+
+	if show_camera and is_instance_valid(show_camera) and show_camera.current:
+		update_show_camera()
 
 	if fp_camera and is_instance_valid(fp_camera) and fp_camera.is_inside_tree():
 		if drone and is_instance_valid(drone) and drone.is_inside_tree():
@@ -153,8 +200,11 @@ func _physics_process(delta):
 
 	match flight_state:
 		FlightState.MANUAL:
-			var input_vec = drone_input.get_smoothed_input(delta)
-			drone.set_input_vector(input_vec)
+			if show_mode == ShowMode.STAR_FORMATION:
+				process_show_mode(delta)
+			else:
+				var input_vec = drone_input.get_smoothed_input(delta)
+				drone.set_input_vector(input_vec)
 		FlightState.AUTOPILOT:
 			process_autopilot_flight(delta)
 		FlightState.TRICK_LOOP:
@@ -396,3 +446,105 @@ func disable_swarm_mode():
 		
 	update_camera_views()
 	print("DroneControllerManager: Swarm mode disabled!")
+
+func toggle_show_mode():
+	if show_mode == ShowMode.STAR_FORMATION:
+		disable_show_mode()
+	else:
+		enable_show_mode()
+
+func enable_show_mode():
+	print("DroneControllerManager: Enabling Star Formation Show Mode...")
+	show_mode = ShowMode.STAR_FORMATION
+
+	if swarm_mode:
+		disable_swarm_mode()
+
+	if not drone or not is_instance_valid(drone):
+		spawn_drone()
+
+	if drone and drone.has_method("set_swarm_mode_active"):
+		drone.set_swarm_mode_active(true)
+	if drone:
+		drone.collision_layer = 2
+		drone.collision_mask = 1
+		show_center = drone.global_position + Vector3(0, show_altitude, 0)
+
+	create_star_formation_targets(39)
+
+	# Spawn the formation swarm once and then let it hold the cached star points.
+	if not swarm_controller or not is_instance_valid(swarm_controller):
+		swarm_controller = Node3D.new()
+		swarm_controller.name = "ShowFormationSwarmController"
+		swarm_controller.set_script(preload("res://scripts/SwarmController.gd"))
+		get_parent().add_child(swarm_controller)
+
+	if swarm_controller and swarm_controller.has_method("initialize_formation"):
+		swarm_controller.initialize_formation(drone, show_target_positions, drone.global_position)
+
+	if not show_controller or not is_instance_valid(show_controller):
+		show_controller = Node3D.new()
+		show_controller.name = "ShowFormationController"
+		get_parent().add_child(show_controller)
+
+	update_camera_views()
+	print("DroneControllerManager: Star formation mode enabled!")
+
+func disable_show_mode():
+	print("DroneControllerManager: Disabling Star Formation Show Mode...")
+	show_mode = ShowMode.NONE
+	show_camera_active = false
+	show_target_positions.clear()
+	if drone and is_instance_valid(drone):
+		if drone.has_method("set_swarm_mode_active"):
+			drone.set_swarm_mode_active(false)
+		drone.collision_layer = 1
+		drone.collision_mask = 1
+	if show_controller and is_instance_valid(show_controller):
+		show_controller.queue_free()
+		show_controller = null
+	if swarm_controller and is_instance_valid(swarm_controller):
+		if swarm_controller.has_method("cleanup"):
+			swarm_controller.cleanup()
+		swarm_controller.queue_free()
+		swarm_controller = null
+	update_camera_views()
+	print("DroneControllerManager: Star formation mode disabled!")
+
+func update_show_camera() -> void:
+	if not show_camera or not is_instance_valid(show_camera):
+		return
+	var center: Vector3 = show_center
+	if swarm_controller and is_instance_valid(swarm_controller) and swarm_controller.has_method("get_swarm_centroid"):
+		center = swarm_controller.get_swarm_centroid()
+	var cam_offset: Vector3 = Vector3(0, 24, 48)
+	show_camera.global_position = show_camera.global_position.lerp(center + cam_offset, 0.08)
+	show_camera.look_at(center, Vector3.UP)
+
+func create_star_formation_targets(count: int) -> void:
+	show_target_positions.clear()
+	var outer_r: float = show_formation_radius
+	var inner_r: float = show_formation_radius * 0.45
+	var points: int = count
+	if points < 10:
+		points = 10
+
+	for i in range(points):
+		var a: float = TAU * float(i) / float(points)
+		var use_outer: bool = (i % 2) == 0
+		var radius: float = outer_r if use_outer else inner_r
+		var pos: Vector3 = show_center + Vector3(cos(a) * radius, 0.0, sin(a) * radius)
+		show_target_positions.append(pos)
+
+	# Add a small center cluster so the star reads clearly.
+	show_target_positions.append(show_center)
+	show_target_positions.append(show_center + Vector3(0, 0, outer_r * 0.25))
+
+func process_show_mode(delta: float) -> void:
+	if not drone or not is_instance_valid(drone):
+		return
+	# Keep the leader drone steady while the formation swarm handles the shape.
+	var target_hover: Vector3 = show_center
+	var to_target: Vector3 = target_hover - drone.global_position
+	var lift: float = clamp(to_target.y * 0.08, -0.4, 0.8)
+	drone.set_input_vector(Vector4(0.5 + lift, 0.0, 0.0, 0.0))
