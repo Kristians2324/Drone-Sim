@@ -15,31 +15,53 @@ var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 var hover_enabled = false
 var speed_multiplier: float = 1.0
 
-# Audio Variables
-var motor_audio: AudioStreamPlayer3D
-var motor_playback: AudioStreamGeneratorPlayback
-var crash_audio: AudioStreamPlayer3D
-var crash_playback: AudioStreamGeneratorPlayback
-var audio_hz = 44100.0
-var motor_phase = 0.0
+var low_cost_mode: bool = false
 
 func set_swarm_mode_active(active: bool):
 	speed_multiplier = 1.6 if active else 1.0
+	if active:
+		set_low_cost_mode(true)
+	else:
+		set_low_cost_mode(low_cost_mode)
 	if is_instance_valid(design):
 		design.visible = !active
 	if is_instance_valid(show_rig):
-		show_rig.visible = !active
-	if is_instance_valid(motor_audio):
-		motor_audio.volume_db = -80.0 if active else 0.0
+		show_rig.visible = true
+		show_rig.set_show_lighting_enabled(not active and not low_cost_mode)
+
+func set_low_cost_mode(enabled: bool) -> void:
+	low_cost_mode = enabled
+	if is_instance_valid(show_rig):
+		show_rig.set_low_cost_mode(enabled)
+		show_rig.visible = true
+		if speed_multiplier > 1.0:
+			show_rig.set_show_lighting_enabled(false)
+	if is_instance_valid(design) and speed_multiplier <= 1.0:
+		design.visible = true
+
+func set_low_detail_visuals(enabled: bool) -> void:
+	low_detail_visuals = enabled
+	if is_instance_valid(show_rig):
+		show_rig.visible = true
+
+func set_show_lighting_enabled(enabled: bool) -> void:
+	if is_instance_valid(show_rig):
+		show_rig.set_show_lighting_enabled(enabled)
 
 @onready var design = $Design
 @onready var collision_shape: CollisionShape3D = $Collision
-
 var drone_model: Node3D
 var propellers: Array[Node3D] = []
 var show_rig: DroneShowLightRig
+var low_detail_visuals: bool = false
+const CAMERA_COLLISION_LAYER := 1 << 31
 
 func _ready():
+	add_to_group("drone_quality_targets")
+	# Prevent drones from colliding with the swarm camera rig.
+	# The camera controller assigns the camera to a dedicated collision layer.
+	collision_layer = 1
+	collision_mask = collision_mask & ~CAMERA_COLLISION_LAYER
 	# Professional heavy physics for maximum stability
 	mass = 5.0
 	gravity_scale = 1.0
@@ -57,9 +79,6 @@ func _ready():
 	collision_shape.shape = BoxShape3D.new()
 	collision_shape.shape.size = Vector3(1.2, 0.2, 1.2)
 	collision_shape.transform = Transform3D.IDENTITY
-	
-	# Setup procedural audio
-	setup_drone_audio()
 	
 	# Find and initialize propellers from the built-in Godot scene model
 	propellers.clear()
@@ -184,9 +203,6 @@ func _find_propellers(node):
 func _physics_process(delta):
 	if get_tree().paused: return
 
-	# Always fill motor audio buffer
-	fill_motor_buffer()
-
 	_apply_input_forces(delta, smoothed_input)
 
 var smoothed_input_internal = Vector4.ZERO
@@ -267,70 +283,10 @@ func setup_show_lights():
 	show_rig.position = Vector3(0, -0.18, 0)
 	add_child(show_rig)
 	show_rig.configure(0, 1, true)
-
-func setup_drone_audio():
-	motor_audio = AudioStreamPlayer3D.new()
-	var generator = AudioStreamGenerator.new()
-	generator.buffer_length = 0.1
-	motor_audio.stream = generator
-	motor_audio.unit_size = 5.0
-	motor_audio.max_distance = 100.0
-	add_child(motor_audio)
-	motor_audio.play()
-	motor_playback = motor_audio.get_stream_playback()
-	
-	crash_audio = AudioStreamPlayer3D.new()
-	var crash_gen = AudioStreamGenerator.new()
-	crash_gen.buffer_length = 0.05
-	crash_audio.stream = crash_gen
-	add_child(crash_audio)
-	crash_audio.play()
-	crash_playback = crash_audio.get_stream_playback()
+	show_rig.set_low_cost_mode(low_cost_mode or speed_multiplier > 1.0)
 
 func _on_drone_collision(_body):
 	if _body and _body.has_method("set_input_vector"):
 		return
 	var impact = linear_velocity.length()
-	if impact > 1.5: 
-		play_crash_sound(impact)
-
-func play_crash_sound(intensity: float):
-	if crash_playback == null: return
-	
-	var vol = clamp(intensity / 10.0, 0.2, 0.5) 
-	var frames_to_push = 2205 
-	
-	for i in range(frames_to_push):
-		var sample = (randf() * 2.0 - 1.0) * vol
-		sample *= (1.0 - float(i) / frames_to_push)
-		crash_playback.push_frame(Vector2(sample, sample))
-	
-	if not crash_audio.playing:
-		crash_audio.play()
-
-func fill_motor_buffer():
-	if motor_playback == null: return
-	
-	var n = motor_playback.get_frames_available()
-	
-	var input_thrust = abs(smoothed_input.x)
-	var input_movement = Vector2(smoothed_input.z, smoothed_input.w).length()
-	var input_yaw = abs(smoothed_input.y)
-	
-	var motor_effort = max(input_thrust, input_movement * 0.45 + input_yaw * 0.25)
-	var speed_contrib = clamp(linear_velocity.length() / 20.0, 0.0, 0.5)
-	
-	var throttle = clamp(max(motor_effort, speed_contrib), 0.0, 1.0)
-	var freq = 60.0 + (throttle * 120.0) 
-	var volume = 0.005 + (throttle * 0.015) 
-	
-	while n > 0:
-		var sample = sin(motor_phase * TAU)
-		sample += sin(motor_phase * 2.0 * TAU) * 0.3
-		sample *= volume
-		
-		if not is_inf(sample) and not is_nan(sample):
-			motor_playback.push_frame(Vector2(sample, sample))
-		
-		motor_phase = fmod(motor_phase + freq / audio_hz, 1.0)
-		n -= 1
+	# Audio intentionally disabled: drone is silent.

@@ -439,6 +439,8 @@ func enable_swarm_mode():
 	if drone:
 		if drone.has_method("set_swarm_mode_active"):
 			drone.set_swarm_mode_active(true)
+		if drone.has_method("set_show_lighting_enabled"):
+			drone.set_show_lighting_enabled(false)
 		drone.collision_layer = 2
 		drone.collision_mask = 1
 	
@@ -463,6 +465,8 @@ func disable_swarm_mode():
 	if drone and is_instance_valid(drone):
 		if drone.has_method("set_swarm_mode_active"):
 			drone.set_swarm_mode_active(false)
+		if drone.has_method("set_show_lighting_enabled"):
+			drone.set_show_lighting_enabled(true)
 		drone.collision_layer = 1
 		drone.collision_mask = 1
 	
@@ -508,6 +512,8 @@ func enable_show_mode():
 
 	if drone and drone.has_method("set_swarm_mode_active"):
 		drone.set_swarm_mode_active(true)
+	if drone and drone.has_method("set_show_lighting_enabled"):
+		drone.set_show_lighting_enabled(true)
 	if drone:
 		drone.collision_layer = 2
 		drone.collision_mask = 1

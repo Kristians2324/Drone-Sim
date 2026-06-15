@@ -3,6 +3,7 @@ extends Node3D
 @export var swarm_controller_path: NodePath
 @export var smoothing : float = 5.0
 @export var camera_node_path: NodePath
+@export var camera_collision_layer: int = 1 << 31
 
 var swarm_controller: Node3D = null
 var camera_node: Camera3D = null
@@ -16,8 +17,24 @@ func _ready():
 
     if has_node(camera_node_path):
         camera_node = get_node(camera_node_path)
+		_configure_camera_collision()
     else:
         push_warning("SwarmCameraController: Camera node not found at path "+str(camera_node_path))
+
+func _configure_camera_collision() -> void:
+	if camera_node == null:
+		return
+
+	# Make the camera itself non-solid for all swarm drones.
+	# Drones are configured to ignore this layer so the camera can pass through them.
+	camera_node.collision_layer = camera_collision_layer
+	camera_node.collision_mask = 0
+
+	# If the camera sits inside a rig with physics bodies, also clear their masks.
+	for child in camera_node.get_parent().get_children():
+		if child is CollisionObject3D:
+			child.collision_layer = camera_collision_layer
+			child.collision_mask = 0
 
 func _process(delta):
     if swarm_controller == null or swarm_controller.drones.size() == 0 or camera_node == null:

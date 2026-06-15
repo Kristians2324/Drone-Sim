@@ -18,6 +18,9 @@ var formation_arrival_radius: float = 2.0
 var formation_ascent_speed: float = 10.0
 var formation_settle_speed: float = 6.0
 var formation_hold_tolerance: float = 0.75
+var terrain_exclude_rids: Array[RID] = []
+var cached_centroid: Vector3 = Vector3.ZERO
+var cached_avg_velocity: Vector3 = Vector3.ZERO
 
 # Boids parameters
 var neighborhood_radius: float = 12.0
@@ -30,6 +33,9 @@ var ground_avoid_weight: float = 12.0
 var upward_bias_weight: float = 2.0
 var max_speed: float = 35.0 # Fast so they can catch up
 var max_force: float = 30.0 # High force to avoid lag
+var update_divisor: int = 1
+var update_phase: int = 0
+var spatial_cell_size: float = 6.0
 
 func _ready():
 	process_mode = Node.PROCESS_MODE_PAUSABLE
@@ -38,6 +44,8 @@ func initialize_swarm(leader: RigidBody3D, count: int = 39, spawn_pos: Vector3 =
 	clear_swarm()
 	leader_drone = leader
 	swarm_count = count
+	update_divisor = 1 if swarm_count <= 18 else 2 if swarm_count <= 32 else 3
+	update_phase = 0
 	active = true
 	formation_active = false
 	formation_targets.clear()
@@ -66,15 +74,24 @@ func initialize_swarm(leader: RigidBody3D, count: int = 39, spawn_pos: Vector3 =
 		# Configure light rig for show colors
 		if drone_inst.has_method("setup_show_lights") and drone_inst.get("show_rig") != null:
 			drone_inst.show_rig.configure(i, swarm_count, false)
+			drone_inst.show_rig.set_low_cost_mode(true)
+			drone_inst.show_rig.set_show_lighting_enabled(false)
+		if drone_inst.has_method("set_low_detail_visuals"):
+			drone_inst.set_low_detail_visuals(true)
+		if drone_inst.has_method("refresh_visual_state"):
+			drone_inst.refresh_visual_state()
 			
 		drones.append(drone_inst)
 
 	print("SwarmController: Swarm initialized with ", drones.size(), " follower drones.")
+	_rebuild_terrain_exclusions()
 
 func initialize_formation(leader: RigidBody3D, targets: Array[Vector3], spawn_pos: Vector3 = Vector3(0, 15, 0)):
 	clear_swarm()
 	leader_drone = leader
 	swarm_count = targets.size()
+	update_divisor = 1 if swarm_count <= 18 else 2 if swarm_count <= 32 else 3
+	update_phase = 0
 	active = true
 	formation_active = true
 	formation_settling = true
@@ -100,9 +117,16 @@ func initialize_formation(leader: RigidBody3D, targets: Array[Vector3], spawn_po
 		drone_inst.collision_mask = 1
 		if drone_inst.has_method("setup_show_lights") and drone_inst.get("show_rig") != null:
 			drone_inst.show_rig.configure(i, swarm_count, false)
+			drone_inst.show_rig.set_low_cost_mode(true)
+			drone_inst.show_rig.set_show_lighting_enabled(false)
+		if drone_inst.has_method("set_low_detail_visuals"):
+			drone_inst.set_low_detail_visuals(true)
+		if drone_inst.has_method("refresh_visual_state"):
+			drone_inst.refresh_visual_state()
 		drones.append(drone_inst)
 
 	print("SwarmController: Formation initialized with ", drones.size(), " drones.")
+	_rebuild_terrain_exclusions()
 
 func update_formation_targets(targets: Array[Vector3]) -> void:
 	formation_targets = targets.duplicate()
@@ -154,8 +178,25 @@ func clear_swarm():
 		if d and is_instance_valid(d):
 			d.queue_free()
 	drones.clear()
+	terrain_exclude_rids.clear()
+	update_phase = 0
 	active = false
 	print("SwarmController: Swarm cleared.")
+
+func _rebuild_terrain_exclusions() -> void:
+	terrain_exclude_rids.clear()
+	if leader_drone and is_instance_valid(leader_drone):
+		terrain_exclude_rids.append(leader_drone.get_rid())
+	for d in drones:
+		if d and is_instance_valid(d):
+			terrain_exclude_rids.append(d.get_rid())
+
+func set_swarm_visual_quality(low_detail: bool) -> void:
+	for d in drones:
+		if d and is_instance_valid(d) and d.has_method("set_low_detail_visuals"):
+			d.set_low_detail_visuals(low_detail)
+		if d and is_instance_valid(d) and d.has_method("refresh_visual_state"):
+			d.refresh_visual_state()
 
 func cleanup():
 	clear_swarm()
@@ -163,6 +204,7 @@ func cleanup():
 func _physics_process(delta):
 	if not active or drones.size() == 0 or not leader_drone or not is_instance_valid(leader_drone):
 		return
+	update_phase = (update_phase + 1) % max(update_divisor, 1)
 
 	if formation_active:
 		_process_formation(delta)
@@ -171,11 +213,14 @@ func _physics_process(delta):
 	# Pre-calculate global centroid and average velocity of the entire swarm (including leader)
 	var centroid = get_swarm_centroid()
 	var avg_velocity = get_swarm_average_velocity()
+	cached_centroid = centroid
+	cached_avg_velocity = avg_velocity
 
 	# Retrieve positions and velocities of all drones
 	var positions: Array[Vector3] = []
 	var velocities: Array[Vector3] = []
 	var valids: Array[bool] = []
+	var spatial_grid: Dictionary = {}
 	positions.resize(drones.size())
 	velocities.resize(drones.size())
 	valids.resize(drones.size())
@@ -190,6 +235,12 @@ func _physics_process(delta):
 			positions[i] = Vector3.ZERO
 			velocities[i] = Vector3.ZERO
 			valids[i] = false
+
+		if valids[i]:
+			var cell_key := _get_spatial_cell_key(positions[i])
+			if not spatial_grid.has(cell_key):
+				spatial_grid[cell_key] = []
+			spatial_grid[cell_key].append(i)
 
 	var leader_pos = leader_drone.global_position
 	var leader_vel = leader_drone.linear_velocity
@@ -209,7 +260,7 @@ func _physics_process(delta):
 		var steer_ground = Vector3.ZERO
 		var steer_upward = Vector3.ZERO
 
-		# 1. OPTIMIZED SEPARATION: only calculate against the single closest neighbor
+		# 1. OPTIMIZED SEPARATION: only calculate against nearby neighbors in adjacent cells
 		var closest_dist_sq = 999999.0
 		var closest_pos = Vector3.ZERO
 
@@ -219,15 +270,21 @@ func _physics_process(delta):
 			closest_dist_sq = d_leader_sq
 			closest_pos = leader_pos
 
-		# Check against other follower drones
-		for j in range(drones.size()):
-			if i == j or not valids[j]:
-				continue
-			var other_pos = positions[j]
-			var d_sq = pos.distance_squared_to(other_pos)
-			if d_sq < closest_dist_sq:
-				closest_dist_sq = d_sq
-				closest_pos = other_pos
+		var cell := _get_spatial_cell(pos)
+		for ox in range(-1, 2):
+			for oy in range(-1, 2):
+				for oz in range(-1, 2):
+					var neighbor_key := cell + Vector3i(ox, oy, oz)
+					if not spatial_grid.has(neighbor_key):
+						continue
+					for j in spatial_grid[neighbor_key]:
+						if i == j or not valids[j]:
+							continue
+						var other_pos = positions[j]
+						var d_sq = pos.distance_squared_to(other_pos)
+						if d_sq < closest_dist_sq:
+							closest_dist_sq = d_sq
+							closest_pos = other_pos
 
 		var closest_dist = sqrt(closest_dist_sq)
 		if closest_dist < separation_radius and closest_dist > 0.001:
@@ -360,13 +417,7 @@ func get_terrain_height_at(pos: Vector3) -> float:
 	var query = PhysicsRayQueryParameters3D.create(from, to)
 	
 	# Exclude leader and all swarm drones to prevent raycast collision with itself/each other
-	var exclude_list = []
-	if leader_drone and is_instance_valid(leader_drone):
-		exclude_list.append(leader_drone.get_rid())
-	for d in drones:
-		if d and is_instance_valid(d):
-			exclude_list.append(d.get_rid())
-	query.exclude = exclude_list
+	query.exclude = terrain_exclude_rids
 
 	var result = space_state.intersect_ray(query)
 	if result.has("position"):
@@ -400,3 +451,13 @@ func get_swarm_average_velocity() -> Vector3:
 	if count > 0:
 		return avg_vel / count
 	return Vector3.ZERO
+
+func _get_spatial_cell(pos: Vector3) -> Vector3i:
+	return Vector3i(
+		int(floor(pos.x / spatial_cell_size)),
+		int(floor(pos.y / spatial_cell_size)),
+		int(floor(pos.z / spatial_cell_size))
+	)
+
+func _get_spatial_cell_key(pos: Vector3) -> Vector3i:
+	return _get_spatial_cell(pos)

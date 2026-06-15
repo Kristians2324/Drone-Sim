@@ -116,6 +116,9 @@ layout_mode = 2
 text = "Wave"
 theme_override_styles/normal = SubResource("StyleBoxFlat_shape")
 
+[node name="HSeparator2" type="HSeparator" parent="Center/Panel/Margin/Layout"]
+layout_mode = 2
+
 [node name="HSeparator" type="HSeparator" parent="Center/Panel/Margin/Layout"]
 layout_mode = 2
 
