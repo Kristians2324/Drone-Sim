@@ -15,6 +15,7 @@ class_name DroneController
 @export var turn_power: float = 18.0
 @export var stabilize_force: float = 45.0
 @export var input_smoothing: float = 3.5
+@export var audio_enabled: bool = true
 
 var collision_shape: CollisionShape3D
 
@@ -47,6 +48,8 @@ func _ready():
 		input_component.initialize(input_smoothing)
 	if audio_component and audio_component.has_method("initialize"):
 		audio_component.initialize()
+	if audio_component and audio_component.has_method("set_audio_enabled"):
+		audio_component.set_audio_enabled(audio_enabled)
 
 func _physics_process(delta):
 	if get_tree().paused:
@@ -65,7 +68,7 @@ func _physics_process(delta):
 		model_component.animate_propellers(delta, prop_speed)
 	
 	# Handle audio
-	if audio_component:
+	if audio_enabled and audio_component:
 		audio_component.update_audio(smoothed_input.x)
 
 func _process(delta):
@@ -81,7 +84,7 @@ func _process(delta):
 		get_tree().reload_current_scene()
 
 func _on_collision(body):
-	if audio_component and audio_component.has_method("play_crash"):
+	if audio_enabled and audio_component and audio_component.has_method("play_crash"):
 		var impact = linear_velocity.length()
 		if impact > 1.5:
 			audio_component.play_crash(impact)
@@ -101,3 +104,12 @@ func set_config(config: Dictionary):
 		stabilize_force = config.stabilize_force
 	if "input_smoothing" in config:
 		input_smoothing = config.input_smoothing
+	if "audio_enabled" in config:
+		audio_enabled = config.audio_enabled
+		if audio_component and audio_component.has_method("set_audio_enabled"):
+			audio_component.set_audio_enabled(audio_enabled)
+
+func set_audio_enabled(enabled: bool) -> void:
+	audio_enabled = enabled
+	if audio_component and audio_component.has_method("set_audio_enabled"):
+		audio_component.set_audio_enabled(enabled)

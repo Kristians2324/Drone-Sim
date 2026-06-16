@@ -14,9 +14,39 @@ var state_toggle_cooldown: float = 0.0
 var spring_arm: SpringArm3D
 var tp_camera: Camera3D
 var fp_camera: Camera3D
+var show_camera_rig: Node3D
+var show_camera: Camera3D
+var show_camera_active: bool = false
+var show_camera_mode: int = 0
+var show_camera_timer: float = 0.0
+var show_camera_switch_interval: float = 4.0
+var show_camera_presets: Array[Vector3] = [
+	Vector3(0, 24, 48),
+	Vector3(48, 20, 0),
+	Vector3(0, 60, 0),
+	Vector3(-42, 18, -30),
+]
+var launch_pad: StaticBody3D = null
+var launch_pad_mesh: MeshInstance3D = null
 
 enum FlightState { MANUAL, AUTOPILOT, TRICK_LOOP, TRICK_BARREL }
 var flight_state = FlightState.MANUAL
+
+enum ShowMode { NONE, STAR_FORMATION, CIRCLE, HEART, DIAMOND, WAVE }
+var show_mode = ShowMode.NONE
+var show_controller: Node3D = null
+var show_mode_sequence: Array[int] = [ShowMode.STAR_FORMATION, ShowMode.CIRCLE, ShowMode.HEART, ShowMode.DIAMOND, ShowMode.WAVE]
+var show_mode_sequence_index: int = 0
+var show_transition_active: bool = false
+var show_transition_progress: float = 0.0
+var show_transition_duration: float = 2.5
+var show_mode_names := {
+	"star": ShowMode.STAR_FORMATION,
+	"circle": ShowMode.CIRCLE,
+	"heart": ShowMode.HEART,
+	"diamond": ShowMode.DIAMOND,
+	"wave": ShowMode.WAVE,
+}
 
 var autopilot_waypoints: Array[Vector3] = [
 	Vector3(0, 15, 0),
@@ -48,6 +78,14 @@ var barrel_start_basis = Basis.IDENTITY
 var barrel_speed = 20.0
 var barrel_radius = 2.0
 
+var show_target_positions: Array[Vector3] = []
+var show_altitude: float = 40.0
+var show_center: Vector3 = Vector3.ZERO
+var show_form_up_speed: float = 14.0
+var show_form_hold_speed: float = 6.0
+var show_form_spread: float = 18.0
+var show_formation_radius: float = 20.0
+
 var post_trick_state = FlightState.MANUAL
 
 
@@ -62,6 +100,20 @@ func _ready():
 
 	fp_camera = Camera3D.new()
 	add_child(fp_camera)
+
+	show_camera_rig = Node3D.new()
+	show_camera_rig.name = "ShowCameraRig"
+	add_child(show_camera_rig)
+
+	show_camera = Camera3D.new()
+	show_camera.current = false
+	show_camera_rig.add_child(show_camera)
+	show_camera.position = Vector3(0, 18, 32)
+	show_camera.look_at(Vector3.ZERO, Vector3.UP)
+
+	create_launch_pad()
+	show_pad_always_visible(true)
+
 	drone_input = preload("res://scripts/drone/DroneInput.gd").new()
 	drone_input.initialize(3.5)
 
@@ -81,6 +133,11 @@ func spawn_drone():
 func cleanup():
 	if tp_camera: tp_camera.current = false
 	if fp_camera: fp_camera.current = false
+	if show_camera: show_camera.current = false
+	if launch_pad and is_instance_valid(launch_pad):
+		launch_pad.queue_free()
+		launch_pad = null
+		launch_pad_mesh = null
 	if drone and is_instance_valid(drone):
 		drone.queue_free()
 		drone = null
@@ -93,8 +150,19 @@ func cleanup():
 
 func update_camera_views():
 	if not drone or not is_instance_valid(drone): return
-	tp_camera.current = !is_first_person
-	fp_camera.current = is_first_person
+	show_camera_active = show_mode != ShowMode.NONE
+	if show_camera_active:
+		tp_camera.current = false
+		fp_camera.current = false
+		show_camera.current = true
+	elif is_first_person:
+		tp_camera.current = false
+		fp_camera.current = true
+		show_camera.current = false
+	else:
+		tp_camera.current = true
+		fp_camera.current = false
+		show_camera.current = false
 
 func _process(delta):
 	if camera_toggle_cooldown > 0: camera_toggle_cooldown -= delta
@@ -120,6 +188,8 @@ func _process(delta):
 		drone.apply_hover_mode()
 		print("DroneControllerManager: Hover mode ", "enabled" if drone.hover_enabled else "disabled")
 
+	# Formation selection is now driven by the pause/menu UI.
+
 	if Input.is_key_pressed(KEY_5) and state_toggle_cooldown <= 0:
 		state_toggle_cooldown = 0.3
 		toggle_autopilot()
@@ -137,9 +207,18 @@ func _process(delta):
 			var follow_pos = drone.global_position
 			if swarm_mode and swarm_controller and is_instance_valid(swarm_controller) and swarm_controller.has_method("get_swarm_centroid"):
 				follow_pos = swarm_controller.get_swarm_centroid()
+			elif show_mode == ShowMode.STAR_FORMATION:
+				follow_pos = show_center
 			spring_arm.global_position = follow_pos + Vector3(0, 0.5, 0)
 			spring_arm.global_transform.basis = drone.global_transform.basis
 			spring_arm.rotate_object_local(Vector3.RIGHT, deg_to_rad(-20))
+
+	if show_camera and is_instance_valid(show_camera) and show_camera.current:
+		show_camera_timer += delta
+		if show_camera_timer >= show_camera_switch_interval:
+			show_camera_timer = 0.0
+			show_camera_mode = (show_camera_mode + 1) % show_camera_presets.size()
+		update_show_camera()
 
 	if fp_camera and is_instance_valid(fp_camera) and fp_camera.is_inside_tree():
 		if drone and is_instance_valid(drone) and drone.is_inside_tree():
@@ -153,8 +232,11 @@ func _physics_process(delta):
 
 	match flight_state:
 		FlightState.MANUAL:
-			var input_vec = drone_input.get_smoothed_input(delta)
-			drone.set_input_vector(input_vec)
+			if show_mode == ShowMode.STAR_FORMATION:
+				process_show_mode(delta)
+			else:
+				var input_vec = drone_input.get_smoothed_input(delta)
+				drone.set_input_vector(input_vec)
 		FlightState.AUTOPILOT:
 			process_autopilot_flight(delta)
 		FlightState.TRICK_LOOP:
@@ -357,6 +439,8 @@ func enable_swarm_mode():
 	if drone:
 		if drone.has_method("set_swarm_mode_active"):
 			drone.set_swarm_mode_active(true)
+		if drone.has_method("set_show_lighting_enabled"):
+			drone.set_show_lighting_enabled(false)
 		drone.collision_layer = 2
 		drone.collision_mask = 1
 	
@@ -381,6 +465,8 @@ func disable_swarm_mode():
 	if drone and is_instance_valid(drone):
 		if drone.has_method("set_swarm_mode_active"):
 			drone.set_swarm_mode_active(false)
+		if drone.has_method("set_show_lighting_enabled"):
+			drone.set_show_lighting_enabled(true)
 		drone.collision_layer = 1
 		drone.collision_mask = 1
 	
@@ -396,3 +482,269 @@ func disable_swarm_mode():
 		
 	update_camera_views()
 	print("DroneControllerManager: Swarm mode disabled!")
+
+func toggle_show_mode():
+	if show_mode == ShowMode.STAR_FORMATION:
+		disable_show_mode()
+	else:
+		enable_show_mode()
+
+func cycle_show_mode() -> void:
+	if show_mode == ShowMode.NONE:
+		enable_show_mode()
+		return
+	show_mode_sequence_index = (show_mode_sequence_index + 1) % show_mode_sequence.size()
+	set_show_shape_by_mode(show_mode_sequence[show_mode_sequence_index])
+
+func enable_show_mode():
+	print("DroneControllerManager: Enabling Drone Show Mode...")
+	show_mode = show_mode_sequence[show_mode_sequence_index]
+	show_camera_mode = 0
+	show_camera_timer = 0.0
+	show_transition_active = true
+	show_transition_progress = 0.0
+
+	if swarm_mode:
+		disable_swarm_mode()
+
+	if not drone or not is_instance_valid(drone):
+		spawn_drone()
+
+	if drone and drone.has_method("set_swarm_mode_active"):
+		drone.set_swarm_mode_active(true)
+	if drone and drone.has_method("set_show_lighting_enabled"):
+		drone.set_show_lighting_enabled(true)
+	if drone:
+		drone.collision_layer = 2
+		drone.collision_mask = 1
+		show_center = drone.global_position + Vector3(0, show_altitude, 0)
+		if launch_pad:
+			launch_pad.global_position = Vector3(show_center.x, 0.0, show_center.z)
+			launch_pad.visible = true
+			var active_town = get_tree().current_scene
+			if active_town:
+				for child in active_town.get_children():
+					if child and child.name.to_lower().find("town") != -1:
+						child.set("protected_center", launch_pad.global_position)
+						child.set("protected_radius", 50.0)
+
+	create_show_targets_for_mode(show_mode, 39)
+
+	# Spawn the formation swarm once and then let it hold the cached star points.
+	if not swarm_controller or not is_instance_valid(swarm_controller):
+		swarm_controller = Node3D.new()
+		swarm_controller.name = "ShowFormationSwarmController"
+		swarm_controller.set_script(preload("res://scripts/SwarmController.gd"))
+		get_parent().add_child(swarm_controller)
+
+	if swarm_controller and swarm_controller.has_method("initialize_formation"):
+		swarm_controller.initialize_formation(drone, show_target_positions, drone.global_position)
+
+	if not show_controller or not is_instance_valid(show_controller):
+		show_controller = Node3D.new()
+		show_controller.name = "ShowFormationController"
+		get_parent().add_child(show_controller)
+
+	update_camera_views()
+	print("DroneControllerManager: Drone show mode enabled!")
+
+func disable_show_mode():
+	print("DroneControllerManager: Disabling Drone Show Mode...")
+	show_mode = ShowMode.NONE
+	show_camera_active = false
+	show_camera_mode = 0
+	show_camera_timer = 0.0
+	show_target_positions.clear()
+	if drone and is_instance_valid(drone):
+		if drone.has_method("set_swarm_mode_active"):
+			drone.set_swarm_mode_active(false)
+		drone.collision_layer = 1
+		drone.collision_mask = 1
+	if show_controller and is_instance_valid(show_controller):
+		show_controller.queue_free()
+		show_controller = null
+	if launch_pad and is_instance_valid(launch_pad):
+		launch_pad.visible = true
+	if swarm_controller and is_instance_valid(swarm_controller):
+		if swarm_controller.has_method("cleanup"):
+			swarm_controller.cleanup()
+		swarm_controller.queue_free()
+		swarm_controller = null
+	update_camera_views()
+	print("DroneControllerManager: Drone show mode disabled!")
+
+func show_pad_always_visible(enabled: bool) -> void:
+	if launch_pad and is_instance_valid(launch_pad):
+		launch_pad.visible = enabled
+
+func advance_show_mode() -> void:
+	show_mode_sequence_index = (show_mode_sequence_index + 1) % show_mode_sequence.size()
+	if show_mode == ShowMode.NONE:
+		enable_show_mode()
+	else:
+		cycle_show_mode()
+
+func select_show_shape(shape_name: String) -> void:
+	var key := shape_name.to_lower()
+	if not show_mode_names.has(key):
+		return
+	show_mode_sequence_index = show_mode_sequence.find(show_mode_names[key])
+	_force_reset_show_shape(show_mode_names[key])
+
+func set_show_mode_by_index(idx: int) -> void:
+	if idx < 0 or idx >= show_mode_sequence.size():
+		return
+	show_mode_sequence_index = idx
+	_force_reset_show_shape(show_mode_sequence[idx])
+
+func _force_reset_show_shape(new_mode: int) -> void:
+	# Always fully reset the show so every button press starts from a clean state.
+	if swarm_controller and is_instance_valid(swarm_controller):
+		if swarm_controller.has_method("cleanup"):
+			swarm_controller.cleanup()
+		swarm_controller.queue_free()
+		swarm_controller = null
+	if show_controller and is_instance_valid(show_controller):
+		show_controller.queue_free()
+		show_controller = null
+	show_mode = ShowMode.NONE
+	show_transition_active = false
+	show_transition_progress = 0.0
+	show_camera_mode = 0
+	show_camera_timer = 0.0
+	show_target_positions.clear()
+	if drone and is_instance_valid(drone):
+		drone.set_input_vector(Vector4.ZERO)
+		drone.linear_velocity = Vector3.ZERO
+		drone.angular_velocity = Vector3.ZERO
+	enable_show_mode()
+	set_show_shape_by_mode(new_mode)
+
+func refresh_show_targets() -> void:
+	create_show_targets_for_mode(show_mode, 39)
+	if swarm_controller and is_instance_valid(swarm_controller):
+		if swarm_controller.has_method("update_formation_targets"):
+			swarm_controller.update_formation_targets(show_target_positions)
+		else:
+			if swarm_controller.has_method("initialize_formation"):
+				swarm_controller.initialize_formation(drone, show_target_positions, drone.global_position)
+
+func set_show_shape_by_mode(new_mode: int) -> void:
+	show_mode = new_mode
+	show_transition_active = true
+	show_transition_progress = 0.0
+	show_camera_mode = 0
+	show_camera_timer = 0.0
+	if drone and is_instance_valid(drone):
+		show_center = drone.global_position + Vector3(0, show_altitude, 0)
+	create_show_targets_for_mode(show_mode, 39)
+	if swarm_controller and is_instance_valid(swarm_controller):
+		if swarm_controller.has_method("initialize_formation"):
+			swarm_controller.initialize_formation(drone, show_target_positions, drone.global_position)
+
+func update_show_camera() -> void:
+	if not show_camera or not is_instance_valid(show_camera):
+		return
+	var center: Vector3 = show_center
+	if swarm_controller and is_instance_valid(swarm_controller) and swarm_controller.has_method("get_swarm_centroid"):
+		center = swarm_controller.get_swarm_centroid()
+	var cam_offset: Vector3 = show_camera_presets[show_camera_mode]
+	show_camera.global_position = show_camera.global_position.lerp(center + cam_offset, 0.08)
+	show_camera.look_at(center, Vector3.UP)
+
+func create_show_targets_for_mode(mode: int, count: int) -> void:
+	show_target_positions.clear()
+	var points: int = max(count, 24)
+	var outer_r: float = show_formation_radius
+	match mode:
+		ShowMode.STAR_FORMATION:
+			var inner_r: float = show_formation_radius * 0.45
+			for i in range(points):
+				var a: float = TAU * float(i) / float(points)
+				var use_outer: bool = (i % 2) == 0
+				var radius: float = outer_r if use_outer else inner_r
+				show_target_positions.append(show_center + Vector3(cos(a) * radius, 0.0, sin(a) * radius))
+			show_target_positions.append(show_center)
+			show_target_positions.append(show_center + Vector3(0, 0, outer_r * 0.25))
+		ShowMode.CIRCLE:
+			for i in range(points):
+				var a2: float = TAU * float(i) / float(points)
+				show_target_positions.append(show_center + Vector3(cos(a2) * outer_r, 0.0, sin(a2) * outer_r))
+		ShowMode.HEART:
+			for i in range(points):
+				var t: float = TAU * float(i) / float(points)
+				var x: float = 16.0 * pow(sin(t), 3)
+				var z: float = 13.0 * cos(t) - 5.0 * cos(2.0 * t) - 2.0 * cos(3.0 * t) - cos(4.0 * t)
+				show_target_positions.append(show_center + Vector3(x, 0.0, z) * 1.3)
+		ShowMode.DIAMOND:
+			for i in range(points):
+				var t3: float = float(i) / float(points)
+				var scaled: float = t3 * 4.0
+				var side: int = int(floor(scaled))
+				var u: float = scaled - float(side)
+				var p: Vector3 = Vector3.ZERO
+				if side == 0:
+					p = Vector3(lerp(0.0, outer_r, u), 0.0, lerp(0.0, outer_r, u))
+				elif side == 1:
+					p = Vector3(lerp(outer_r, 0.0, u), 0.0, lerp(outer_r, -outer_r, u))
+				elif side == 2:
+					p = Vector3(lerp(0.0, -outer_r, u), 0.0, lerp(-outer_r, outer_r, u))
+				else:
+					p = Vector3(lerp(-outer_r, 0.0, u), 0.0, lerp(outer_r, 0.0, u))
+				show_target_positions.append(show_center + p)
+		ShowMode.WAVE:
+			for i in range(points):
+				var s2: float = float(i) / float(points - 1)
+				var x2: float = lerp(-outer_r, outer_r, s2)
+				var y2: float = sin(s2 * TAU * 2.0) * 8.0
+				var z2: float = cos(s2 * TAU * 3.0) * 6.0
+				show_target_positions.append(show_center + Vector3(x2, y2, z2))
+
+func process_show_mode(delta: float) -> void:
+	if not drone or not is_instance_valid(drone):
+		return
+	if show_transition_active:
+		show_transition_progress = min(show_transition_progress + delta, show_transition_duration)
+		var t: float = show_transition_progress / show_transition_duration
+		t = t * t * (3.0 - 2.0 * t)
+		var target_hover: Vector3 = show_center
+		var hover_height: float = lerp(drone.global_position.y, target_hover.y, t)
+		var hover_target := Vector3(show_center.x, hover_height, show_center.z)
+		var to_target: Vector3 = hover_target - drone.global_position
+		var lift: float = clamp(to_target.y * 0.06, -0.25, 0.75)
+		drone.set_input_vector(Vector4(0.48 + lift, 0.0, 0.0, 0.0))
+		if show_transition_progress >= show_transition_duration:
+			show_transition_active = false
+			drone.linear_velocity = Vector3.ZERO
+			drone.angular_velocity = Vector3.ZERO
+			refresh_show_targets()
+	else:
+		# Keep the leader drone steady while the formation swarm handles the shape.
+		var target_hover: Vector3 = show_center
+		var to_target: Vector3 = target_hover - drone.global_position
+		var lift: float = clamp(to_target.y * 0.08, -0.4, 0.8)
+		drone.set_input_vector(Vector4(0.5 + lift, 0.0, 0.0, 0.0))
+	
+
+func create_launch_pad() -> void:
+	if launch_pad and is_instance_valid(launch_pad):
+		return
+	launch_pad = StaticBody3D.new()
+	launch_pad.name = "ShowLaunchPad"
+	launch_pad.collision_layer = 1
+	launch_pad.collision_mask = 1
+	add_child(launch_pad)
+
+	var collision_shape: CollisionShape3D = CollisionShape3D.new()
+	var shape: BoxShape3D = BoxShape3D.new()
+	shape.size = Vector3(80.0, 1.0, 80.0)
+	collision_shape.shape = shape
+	launch_pad.add_child(collision_shape)
+
+	launch_pad_mesh = MeshInstance3D.new()
+	var box_mesh: BoxMesh = BoxMesh.new()
+	box_mesh.size = Vector3(80.0, 1.0, 80.0)
+	launch_pad_mesh.mesh = box_mesh
+	launch_pad_mesh.position = Vector3(0.0, -0.5, 0.0)
+	launch_pad.add_child(launch_pad_mesh)
+	launch_pad.visible = false

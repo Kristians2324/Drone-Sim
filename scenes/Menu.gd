@@ -2,8 +2,16 @@ extends CanvasLayer
 
 @onready var controls_label = $Center/Panel/Margin/Layout/Controls
 @onready var resume_button = $Center/Panel/Margin/Layout/Resume
+@onready var formation_buttons = {
+	"star": $Center/Panel/Margin/Layout/Formations/Grid/Star,
+	"circle": $Center/Panel/Margin/Layout/Formations/Grid/Circle,
+	"heart": $Center/Panel/Margin/Layout/Formations/Grid/Heart,
+	"diamond": $Center/Panel/Margin/Layout/Formations/Grid/Diamond,
+	"wave": $Center/Panel/Margin/Layout/Formations/Grid/Wave,
+}
 
 var last_input_was_controller: bool = false
+
 
 const KEYBOARD_TEXT = "--- KEYBOARD CONTROLS ---
 SPACE / SHIFT : Thrust Up/Down
@@ -33,6 +41,7 @@ func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	hide()
 	update_controls_display()
+	connect_formation_buttons()
 
 func _input(event):
 	# Detect if user is using a controller
@@ -48,6 +57,18 @@ func _input(event):
 func update_controls_display():
 	if controls_label:
 		controls_label.text = CONTROLLER_TEXT if last_input_was_controller else KEYBOARD_TEXT
+
+func connect_formation_buttons():
+	for key in formation_buttons.keys():
+		var button = formation_buttons[key]
+		if button and not button.pressed.is_connected(_on_formation_pressed.bind(key)):
+			button.pressed.connect(_on_formation_pressed.bind(key))
+
+func _on_formation_pressed(shape_name: String) -> void:
+	var manager = get_tree().current_scene.get_node_or_null("DroneControllerManager")
+	if manager and manager.has_method("select_show_shape"):
+		manager.select_show_shape(shape_name)
+		resume()
 
 func toggle():
 	if visible:

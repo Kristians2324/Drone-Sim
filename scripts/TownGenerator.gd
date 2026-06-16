@@ -2,6 +2,9 @@ extends Node3D
 
 @export var grid_size = 5
 @export var spacing = 15.0
+@export var town_center: Vector3 = Vector3(800, 0, 800)
+@export var protected_center: Vector3 = Vector3(800, 0, 800)
+@export var protected_radius: float = 45.0
 var house_scene = preload("res://scenes/House.tscn")
 
 func _ready():
@@ -17,7 +20,10 @@ func generate_town():
 				
 			var house = house_scene.instantiate()
 			var pos = Vector3(x * spacing, 0, z * spacing)
-			house.position = pos - Vector3(grid_size * spacing * 0.5, 0, grid_size * spacing * 0.5) + Vector3(50, 0, 50)
+			var world_pos = pos - Vector3(grid_size * spacing * 0.5, 0, grid_size * spacing * 0.5) + town_center
+			if world_pos.distance_to(protected_center) < protected_radius:
+				continue
+			house.position = world_pos
 			
 			# Randomize look
 			house.rotation.y = randf() * PI * 2.0

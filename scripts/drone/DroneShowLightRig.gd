@@ -17,6 +17,13 @@ var halo_light: OmniLight3D
 var down_light: SpotLight3D
 var halo_mesh: MeshInstance3D
 var halo_material: StandardMaterial3D
+var visuals_enabled: bool = true
+var light_update_interval: float = 0.0
+var light_update_timer: float = 0.0
+var _last_visuals_enabled: bool = true
+var _low_cost_cached: bool = false
+var _saved_visual_state: bool = true
+var _show_lighting_enabled: bool = false
 
 func _ready():
 	process_mode = Node.PROCESS_MODE_PAUSABLE
@@ -24,6 +31,19 @@ func _ready():
 	_build_rig()
 	_rebuild_palette()
 	_apply_palette_to_visuals()
+
+func set_visuals_enabled(enabled: bool) -> void:
+	visuals_enabled = enabled
+	_last_visuals_enabled = enabled
+	_saved_visual_state = enabled
+	if halo_light:
+		halo_light.visible = enabled
+	if down_light:
+		down_light.visible = enabled
+	if halo_mesh:
+		halo_mesh.visible = enabled
+	set_process(enabled)
+	_apply_light_output_state()
 
 func configure(index: int, total: int, player_drone: bool = false):
 	drone_index = max(index, 0)
@@ -133,13 +153,21 @@ func _apply_palette_to_visuals():
 	halo_light.light_energy = 2.6 if is_player_drone else 2.0
 	if down_light:
 		down_light.light_color = base_color.lerp(Color.WHITE, 0.1)
-		down_light.light_energy = 3.6 if is_player_drone else 2.8
+		down_light.light_energy = (3.6 if is_player_drone else 2.8) if _show_lighting_enabled else 0.0
 	halo_material.albedo_color = Color(base_color.r, base_color.g, base_color.b, 0.85)
 	halo_material.emission = base_color
 	halo_material.emission_energy_multiplier = 3.4 if is_player_drone else 2.8
+	_apply_light_output_state()
 
 func _process(delta: float):
+	if not visuals_enabled:
+		return
+
 	show_time += delta
+	light_update_timer += delta
+	if light_update_interval > 0.0 and light_update_timer < light_update_interval:
+		return
+	light_update_timer = 0.0
 
 	var slow_wave: float = 0.5 + 0.5 * sin(show_time * (2.2 if is_player_drone else 1.9) + phase_offset)
 	var fast_wave: float = 0.5 + 0.5 * sin(show_time * (4.6 if is_player_drone else 3.8) + phase_offset * 1.7 + 0.7)
@@ -151,12 +179,40 @@ func _process(delta: float):
 
 	if halo_light:
 		halo_light.light_color = color
-		halo_light.light_energy = (4.2 if is_player_drone else 2.3) + slow_wave * (2.1 if is_player_drone else 1.2)
+		halo_light.light_energy = ((4.2 if is_player_drone else 2.3) + slow_wave * (2.1 if is_player_drone else 1.2)) if _show_lighting_enabled else 0.0
 	if down_light:
 		down_light.light_color = color.lerp(Color.WHITE, 0.08)
-		down_light.light_energy = (5.0 if is_player_drone else 3.2) + slow_wave * (2.6 if is_player_drone else 1.4)
+		down_light.light_energy = ((5.0 if is_player_drone else 3.2) + slow_wave * (2.6 if is_player_drone else 1.4)) if _show_lighting_enabled else 0.0
 
 	if halo_material:
 		halo_material.albedo_color = Color(color.r, color.g, color.b, 0.78 if is_player_drone else 0.82)
 		halo_material.emission = color
 		halo_material.emission_energy_multiplier = (4.6 if is_player_drone else 3.2) + fast_wave * 1.0
+
+func set_low_cost_mode(enabled: bool) -> void:
+	_low_cost_cached = enabled
+	light_update_interval = 0.25 if enabled else 0.0
+	set_visuals_enabled(true)
+	_show_lighting_enabled = not enabled
+	if enabled:
+		_saved_visual_state = visuals_enabled
+	_apply_light_output_state()
+	if not enabled:
+		_apply_palette_to_visuals()
+
+func set_high_performance_mode(enabled: bool) -> void:
+	# In performance mode we still keep visuals, but we slow the modulation a bit.
+	light_update_interval = 0.0 if enabled else light_update_interval
+
+func set_show_lighting_enabled(enabled: bool) -> void:
+	_show_lighting_enabled = enabled
+	set_visuals_enabled(true)
+	_apply_light_output_state()
+
+func _apply_light_output_state() -> void:
+	if halo_light:
+		halo_light.light_energy = (2.6 if is_player_drone else 2.0) if _show_lighting_enabled else 0.0
+	if down_light:
+		down_light.light_energy = (3.6 if is_player_drone else 2.8) if _show_lighting_enabled else 0.0
+	if halo_material:
+		halo_material.emission_energy_multiplier = halo_material.emission_energy_multiplier if _show_lighting_enabled else 0.6
