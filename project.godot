@@ -96,9 +96,6 @@ renderer/rendering_method="compatibility"
 renderer/rendering_method.mobile="compatibility"
 textures/vram_compression/import_etc2_astc=true
 
-[script_setup]
-
-run/main_scene_script="res://tests/test_runner.gd"
 
 [xr]
 

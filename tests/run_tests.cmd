@@ -13,11 +13,27 @@ if not exist "%GODOT_EXE%" (
 )
 
 pushd "%~dp0\.."
+
+set "LOG=%~dp0test_output.txt"
+
 echo Running tests...
-"%GODOT_EXE%" --headless --path . --script res://tests/test_runner.gd
-set "EXITCODE=%ERRORLEVEL%"
 echo.
-echo Exit code: %EXITCODE%
-pause
+
+:: Godot on Windows does not pipe stdout to the console when launched from cmd.
+:: We redirect its output to a log file and then print it here.
+"%GODOT_EXE%" --headless --path . --script res://tests/test_runner.gd > "%LOG%" 2>&1
+set "EXITCODE=%ERRORLEVEL%"
+
+:: Print the log to the console
+type "%LOG%"
+
+echo.
+if "%EXITCODE%"=="0" (
+	echo [ALL TESTS PASSED] Exit code: 0
+) else (
+	echo [TESTS FAILED] Exit code: %EXITCODE%
+)
+
 popd
+pause
 exit /b %EXITCODE%
