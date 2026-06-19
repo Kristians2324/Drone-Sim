@@ -1,6 +1,17 @@
 @echo off
 setlocal
 
+:: =============================================================================
+:: Drone Sim – Headless Test Runner (Windows CMD)
+:: Runs the full test suite including:
+:: - BoidManager
+:: - DroneInput
+:: - DroneShowLightRig
+:: - Boid
+:: - SwarmController
+:: - Menu / ESC Key Toggling
+:: =============================================================================
+
 set "GODOT_EXE=%USERPROFILE%\Desktop\R2\Godot_v4.6.2-stable_win64.exe"
 
 if not exist "%GODOT_EXE%" (
