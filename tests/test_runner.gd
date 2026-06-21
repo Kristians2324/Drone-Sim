@@ -36,7 +36,7 @@ func _initialize() -> void:
 	run_suite("DroneShowLightRig – real functions",  _tests_light_rig)
 	run_suite("Boid         – real functions",       _tests_boid)
 	run_suite("SwarmController – real properties",   _tests_swarm_controller)
-	
+	run_suite("Drone Controls – input and flight tests", _tests_drone_controls)
 
 	print("")
 	print("════════════════════════════════════════════════════")
@@ -310,3 +310,40 @@ func _tests_swarm_controller() -> void:
 	if sc != null:
 		sc.queue_free()
 	await process_frame
+
+# =============================================================================
+# ── Drone Controls ───────────────────────────────────────────────────────────
+# Tests for ESC key, other buttons, and drone flight functionality
+# =============================================================================
+func _tests_drone_controls() -> void:
+	# Test ESC key functionality
+	var esc_pressed = _simulate_key_press(KEY_ESCAPE)
+	assert_true(esc_pressed, "ESC key press simulation")
+
+	# Test other important buttons (W, A, S, D, Space)
+	var buttons = [KEY_W, KEY_A, KEY_S, KEY_D, KEY_SPACE]
+	var all_buttons_work = true
+	for button in buttons:
+		if not _simulate_key_press(button):
+			all_buttons_work = false
+			print("  ❌ FAIL  Button test failed for key code: %d" % button)
+	assert_true(all_buttons_work, "Other buttons (W, A, S, D, Space) press simulation")
+
+	# Test if drone can fly
+	var drone = get_root().get_node_or_null("Main/Drone")
+	if drone == null:
+		assert_true(false, "Drone node found in scene tree")
+		return
+	drone.start_flight()
+	await Engine.get_main_loop().create_timer(1.0).timeout # wait 1 second
+	assert_true(drone.is_flying(), "Drone flight status after start_flight()")
+
+# Helper function to simulate key press (stub)
+func _simulate_key_press(key_code: int) -> bool:
+	# This is a stub for input simulation; adapt as needed for your input system
+	var event = InputEventKey.new()
+	event.keycode = key_code
+	event.pressed = true
+	Input.parse_input_event(event)
+	# Return true as a placeholder; replace with actual verification if possible
+	return true

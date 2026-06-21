@@ -18,8 +18,10 @@ class_name DroneController
 @export var audio_enabled: bool = true
 
 var collision_shape: CollisionShape3D
+var start_global_transform: Transform3D
 
 func _ready():
+	start_global_transform = global_transform
 	# Physics setup
 	mass = 5.0
 	gravity_scale = 1.0
@@ -78,10 +80,15 @@ func _process(delta):
 	# Camera toggle
 	if Input.is_key_pressed(KEY_C) and not camera_component.is_cooldown_active():
 		camera_component.toggle_view()
-	
-	# Reload scene
-	if Input.is_key_pressed(KEY_R):
-		get_tree().reload_current_scene()
+
+func reset_to_start() -> void:
+	global_transform = start_global_transform
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	if input_component and input_component.has_method("reset"):
+		input_component.reset()
+	if camera_component and camera_component.has_method("reset"):
+		camera_component.reset()
 
 func _on_collision(body):
 	if audio_enabled and audio_component and audio_component.has_method("play_crash"):
