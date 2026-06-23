@@ -12,13 +12,24 @@ setlocal
 :: - Menu / ESC Key Toggling
 :: =============================================================================
 
-set "GODOT_EXE=%USERPROFILE%\Desktop\R2\Godot_v4.6.2-stable_win64.exe"
+set "GODOT_EXE=%USERPROFILE%\Desktop\godot\Godot_v4.6.2-stable_win64.exe"
+
+if not exist "%GODOT_EXE%" (
+	for %%F in ("%USERPROFILE%\Desktop\godot\*.exe") do (
+		if exist "%%~fF" set "GODOT_EXE=%%~fF"
+	)
+)
+
+if not exist "%GODOT_EXE%" (
+	set "GODOT_EXE=%USERPROFILE%\Desktop\R2\Godot_v4.6.2-stable_win64.exe"
+)
 
 if not exist "%GODOT_EXE%" (
 	echo Could not find Godot at:
-	echo   %GODOT_EXE%
+	echo   %USERPROFILE%\Desktop\godot\*.exe
+	echo   %USERPROFILE%\Desktop\R2\Godot_v4.6.2-stable_win64.exe
 	echo.
-	echo Right-click this file and choose Edit if your Godot path is different.
+	echo Put Godot in a folder named ^"godot^" on your Desktop, or update this script.
 	pause
 	exit /b 1
 )

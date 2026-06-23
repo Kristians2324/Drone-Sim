@@ -17,8 +17,12 @@ That launcher runs Godot in headless mode.
 - it runs whatever is configured as the test main scene
 - `Exit code: 0` means success
 
-## Current launcher path
+## Godot path detection
 
 ```text
-%USERPROFILE%\Desktop\R2\Godot_v4.6.2-stable_win64.exe
+%USERPROFILE%\Desktop\godot\*.exe
 ```
+
+The launcher first looks for a Godot executable in a folder named `godot`
+on your Desktop. If it does not find one there, it falls back to the older
+`Desktop\R2\Godot_v4.6.2-stable_win64.exe` path.
