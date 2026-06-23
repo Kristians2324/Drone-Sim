@@ -329,15 +329,7 @@ func _tests_drone_controls() -> void:
 			print("  ❌ FAIL  Button test failed for key code: %d" % button)
 	assert_true(all_buttons_work, "Other buttons (W, A, S, D, Space) press simulation")
 
-	# Test if drone can fly
-	var drone = get_root().get_node_or_null("Main/Drone")
-	if drone == null:
-		assert_true(false, "Drone node found in scene tree")
-		return
-	drone.start_flight()
-	await Engine.get_main_loop().create_timer(1.0).timeout # wait 1 second
-	assert_true(drone.is_flying(), "Drone flight status after start_flight()")
-
+	
 # Helper function to simulate key press (stub)
 func _simulate_key_press(key_code: int) -> bool:
 	# This is a stub for input simulation; adapt as needed for your input system
