@@ -53,7 +53,7 @@ func _input(event):
 		if last_input_was_controller:
 			last_input_was_controller = false
 			update_controls_display()
-											
+
 func update_controls_display():
 	if controls_label:
 		controls_label.text = CONTROLLER_TEXT if last_input_was_controller else KEYBOARD_TEXT

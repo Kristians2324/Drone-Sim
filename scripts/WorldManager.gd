@@ -52,3 +52,12 @@ func _input(event):
 			load_environment(MapMoon)
 		elif event.keycode == KEY_4:
 			load_environment(MapIndoor)
+		elif event.keycode == KEY_R:
+			if menu_instance:
+				menu_instance.resume()
+			call_deferred("_restart_fresh")
+			get_viewport().set_input_as_handled()
+
+func _restart_fresh():
+	if get_tree():
+		get_tree().reload_current_scene()
