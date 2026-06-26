@@ -8,12 +8,17 @@ class_name DroneController
 @onready var physics_component: Node3D = $Physics
 @onready var input_component: Node3D = $InputHandler
 @onready var audio_component: Node3D = $Audio
+var wind_indicator: WindIndicator
 
 # Configuration
 @export var throttle_power: float = 180.0
-@export var forward_power: float = 120.0
+@export var forward_power: float = 6.31
 @export var turn_power: float = 18.0
 @export var stabilize_force: float = 45.0
+@export var max_acceleration: float = 6.0
+@export var max_deceleration: float = 4.0
+@export var wind_direction: Vector3 = Vector3(1, 0, 0)
+@export var wind_strength: float = 0.0
 @export var input_smoothing: float = 3.5
 @export var audio_enabled: bool = true
 
@@ -45,13 +50,17 @@ func _ready():
 	if camera_component and camera_component.has_method("initialize"):
 		camera_component.initialize()
 	if physics_component and physics_component.has_method("initialize"):
-		physics_component.initialize(throttle_power, forward_power, turn_power, stabilize_force)
+		physics_component.initialize(throttle_power, forward_power, turn_power, stabilize_force, max_acceleration, max_deceleration)
+	if physics_component and physics_component.has_method("set_wind"):
+		physics_component.set_wind(wind_direction, wind_strength)
 	if input_component and input_component.has_method("initialize"):
 		input_component.initialize(input_smoothing)
 	if audio_component and audio_component.has_method("initialize"):
 		audio_component.initialize()
 	if audio_component and audio_component.has_method("set_audio_enabled"):
 		audio_component.set_audio_enabled(audio_enabled)
+	_setup_wind_indicator()
+	_update_wind_indicator()
 
 func _physics_process(delta):
 	if get_tree().paused:
@@ -109,14 +118,37 @@ func set_config(config: Dictionary):
 		turn_power = config.turn_power
 	if "stabilize_force" in config:
 		stabilize_force = config.stabilize_force
+	if "max_acceleration" in config:
+		max_acceleration = config.max_acceleration
+	if "max_deceleration" in config:
+		max_deceleration = config.max_deceleration
+	if "wind_direction" in config:
+		wind_direction = config.wind_direction
+	if "wind_strength" in config:
+		wind_strength = config.wind_strength
 	if "input_smoothing" in config:
 		input_smoothing = config.input_smoothing
 	if "audio_enabled" in config:
 		audio_enabled = config.audio_enabled
 		if audio_component and audio_component.has_method("set_audio_enabled"):
 			audio_component.set_audio_enabled(audio_enabled)
+	if physics_component and physics_component.has_method("set_wind"):
+		physics_component.set_wind(wind_direction, wind_strength)
+	_update_wind_indicator()
 
 func set_audio_enabled(enabled: bool) -> void:
 	audio_enabled = enabled
 	if audio_component and audio_component.has_method("set_audio_enabled"):
 		audio_component.set_audio_enabled(enabled)
+
+func _setup_wind_indicator() -> void:
+	if wind_indicator != null:
+		return
+	wind_indicator = WindIndicator.new()
+	wind_indicator.name = "WindIndicator"
+	add_child(wind_indicator)
+
+func _update_wind_indicator() -> void:
+	if wind_indicator == null:
+		return
+	wind_indicator.set_wind(wind_direction, wind_strength)

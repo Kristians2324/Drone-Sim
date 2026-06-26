@@ -10,6 +10,8 @@ const HOVER_MIN_CLEARANCE = 2.0
 const HOVER_HOLD_FORCE = 55.0
 const HOVER_HOLD_DAMPING = 12.0
 const HOVER_MAX_HOLD_FORCE = 90.0
+const MAX_PITCH_DEGREES = 30.0
+const MAX_TILT_DEGREES = 35.0
 
 var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 var hover_enabled = false
@@ -255,6 +257,17 @@ func _apply_input_forces(delta, input_vec: Vector4):
 		current_stabilize = STABILIZE_FORCE * 3.0
 		
 	apply_torque(correction * current_stabilize)
+
+	# Keep the drone within the configured attitude limits.
+	var current_pitch = rad_to_deg(get_rotation().x)
+	var current_tilt = max(abs(rad_to_deg(get_rotation().z)), abs(rad_to_deg(get_rotation().x)))
+	if abs(current_pitch) > MAX_PITCH_DEGREES:
+		var pitch_correction = clamp(-current_pitch * 0.05, -1.0, 1.0)
+		apply_torque(global_transform.basis.x * pitch_correction * TURN_POWER * speed_multiplier)
+	if current_tilt > MAX_TILT_DEGREES:
+		var tilt_error = current_tilt - MAX_TILT_DEGREES
+		var tilt_correction = clamp(tilt_error * 0.05, 0.0, 1.0)
+		apply_torque(global_transform.basis.z * tilt_correction * TURN_POWER * speed_multiplier)
 
 	var prop_speed = 30.0 + (smoothed_input_internal.x * 60.0)
 	for prop in propellers:

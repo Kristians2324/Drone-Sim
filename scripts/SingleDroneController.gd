@@ -1,6 +1,8 @@
 extends Node3D
 
 @export var drone_scene: PackedScene = preload("res://scenes/Drone.tscn")
+@export var default_wind_direction: Vector3 = Vector3(1, 0, 0)
+@export var default_wind_strength: float = 0.65
 
 var drone: RigidBody3D = null
 var drone_input = null
@@ -76,6 +78,8 @@ func spawn_drone():
 	drone = drone_scene.instantiate()
 	get_parent().add_child(drone)
 	drone.global_position = Vector3(0, 5, 0)
+	if drone.has_method("set_wind"):
+		drone.set_wind(default_wind_direction, default_wind_strength)
 	
 	update_camera_views()
 	print("SingleDroneController: Spawned player drone.")
