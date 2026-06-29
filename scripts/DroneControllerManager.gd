@@ -28,6 +28,9 @@ var show_camera_presets: Array[Vector3] = [
 ]
 var launch_pad: StaticBody3D = null
 var launch_pad_mesh: MeshInstance3D = null
+var recharge_structure: Node3D = null
+var low_battery_return_active: bool = false
+var low_battery_landing_active: bool = false
 
 enum FlightState { MANUAL, AUTOPILOT, TRICK_LOOP, TRICK_BARREL }
 var flight_state = FlightState.MANUAL
@@ -126,6 +129,7 @@ func spawn_drone():
 	drone = drone_scene.instantiate()
 	get_parent().call_deferred("add_child", drone)
 	drone.call_deferred("set", "global_position", Vector3(0, 5, 0))
+	recharge_structure = launch_pad
 
 	update_camera_views()
 	print("DroneControllerManager: Spawned player drone.")
@@ -176,6 +180,8 @@ func _process(delta):
 
 	if not drone or not is_instance_valid(drone):
 		return
+
+	_update_low_battery_behavior(delta)
 
 	if Input.is_key_pressed(KEY_C) and camera_toggle_cooldown <= 0:
 		is_first_person = !is_first_person
@@ -244,6 +250,66 @@ func _physics_process(delta):
 		FlightState.TRICK_BARREL:
 			process_trick_barrel(delta)
 
+func get_drone() -> RigidBody3D:
+	return drone
+
+func _update_low_battery_behavior(delta: float) -> void:
+	if not drone or not is_instance_valid(drone):
+		return
+
+	if drone.has_method("is_battery_empty") and drone.is_battery_empty():
+		return
+
+	if not drone.has_method("is_battery_auto_landing") or not drone.is_battery_auto_landing():
+		low_battery_return_active = false
+		low_battery_landing_active = false
+		return
+
+	var target := _get_recharge_target()
+	if target == null:
+		return
+
+	low_battery_return_active = true
+	var target_pos := target.global_position + Vector3.UP * 2.0
+	var to_target := target_pos - drone.global_position
+	var distance := to_target.length()
+	var direction := to_target.normalized() if distance > 0.01 else Vector3.ZERO
+
+	if not drone.has_method("set_input_vector"):
+		return
+
+	# Steer gently toward the recharge structure.
+	var input := Vector4.ZERO
+	var local_dir := drone.global_transform.basis.inverse() * direction
+	input.x = clamp((target_pos.y - drone.global_position.y) * 0.12, -0.55, 0.65)
+	input.z = clamp(-local_dir.z * 0.6, -0.75, 0.75)
+	input.w = clamp(local_dir.x * 0.6, -0.75, 0.75)
+
+	# If we're close, level out and land.
+	if distance < 10.0:
+		low_battery_landing_active = true
+		input.x = -0.15 if drone.global_position.y > target.global_position.y + 0.6 else 0.0
+		input.z = 0.0
+		input.w = 0.0
+
+	drone.set_input_vector(input)
+
+	if low_battery_landing_active and distance < 2.2:
+		if drone.has_method("apply_hover_mode"):
+			drone.hover_enabled = true
+			drone.apply_hover_mode()
+		if drone.has_method("start_battery_recharge"):
+			drone.start_battery_recharge()
+			low_battery_return_active = false
+			low_battery_landing_active = false
+
+func _get_recharge_target() -> Node3D:
+	if recharge_structure and is_instance_valid(recharge_structure):
+		return recharge_structure
+	if launch_pad and is_instance_valid(launch_pad):
+		return launch_pad
+	return null
+
 func get_terrain_height_at(pos: Vector3) -> float:
 	var space_state = drone.get_world_3d().direct_space_state
 	if not space_state:
@@ -291,7 +357,7 @@ func process_autopilot_flight(delta):
 		
 	var check_pos = drone.global_position + forward_dir * look_ahead_dist
 	var terrain_height_ahead = get_terrain_height_at(check_pos)
-	var terrain_height_below = get_terrain_height_at(drone.global_position)
+	var terrain_height_below: float = get_terrain_height_at(drone.global_position)
 	
 	var flight_min_clearance = 12.0
 	var safe_y = max(terrain_height_below + flight_min_clearance, terrain_height_ahead + flight_min_clearance)
