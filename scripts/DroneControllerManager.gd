@@ -28,6 +28,7 @@ var show_camera_presets: Array[Vector3] = [
 ]
 var launch_pad: StaticBody3D = null
 var launch_pad_mesh: MeshInstance3D = null
+var launch_pad_marker: MeshInstance3D = null
 var recharge_structure: Node3D = null
 var low_battery_return_active: bool = false
 var low_battery_landing_active: bool = false
@@ -269,6 +270,17 @@ func _update_low_battery_behavior(delta: float) -> void:
 	if target == null:
 		return
 
+	# If the drone is already sitting on the pad, trigger recharge immediately.
+	if drone.global_position.distance_to(target.global_position) <= 3.5:
+		if drone.has_method("apply_hover_mode"):
+			drone.hover_enabled = true
+			drone.apply_hover_mode()
+		if drone.has_method("start_battery_recharge"):
+			drone.start_battery_recharge()
+		low_battery_return_active = false
+		low_battery_landing_active = false
+		return
+
 	low_battery_return_active = true
 	var target_pos := target.global_position + Vector3.UP * 2.0
 	var to_target := target_pos - drone.global_position
@@ -294,7 +306,7 @@ func _update_low_battery_behavior(delta: float) -> void:
 
 	drone.set_input_vector(input)
 
-	if low_battery_landing_active and distance < 2.2:
+	if low_battery_landing_active and distance < 4.0:
 		if drone.has_method("apply_hover_mode"):
 			drone.hover_enabled = true
 			drone.apply_hover_mode()
@@ -642,6 +654,8 @@ func disable_show_mode():
 func show_pad_always_visible(enabled: bool) -> void:
 	if launch_pad and is_instance_valid(launch_pad):
 		launch_pad.visible = enabled
+	if launch_pad_marker and is_instance_valid(launch_pad_marker):
+		launch_pad_marker.visible = enabled
 
 func advance_show_mode() -> void:
 	show_mode_sequence_index = (show_mode_sequence_index + 1) % show_mode_sequence.size()
@@ -796,21 +810,46 @@ func create_launch_pad() -> void:
 	if launch_pad and is_instance_valid(launch_pad):
 		return
 	launch_pad = StaticBody3D.new()
-	launch_pad.name = "ShowLaunchPad"
+	launch_pad.name = "RechargeTower"
 	launch_pad.collision_layer = 1
 	launch_pad.collision_mask = 1
 	add_child(launch_pad)
 
 	var collision_shape: CollisionShape3D = CollisionShape3D.new()
-	var shape: BoxShape3D = BoxShape3D.new()
-	shape.size = Vector3(80.0, 1.0, 80.0)
-	collision_shape.shape = shape
+	var tower_shape: CylinderShape3D = CylinderShape3D.new()
+	tower_shape.height = 18.0
+	tower_shape.radius = 4.5
+	collision_shape.shape = tower_shape
+	collision_shape.position = Vector3(0.0, 9.0, 0.0)
 	launch_pad.add_child(collision_shape)
 
-	launch_pad_mesh = MeshInstance3D.new()
-	var box_mesh: BoxMesh = BoxMesh.new()
-	box_mesh.size = Vector3(80.0, 1.0, 80.0)
-	launch_pad_mesh.mesh = box_mesh
-	launch_pad_mesh.position = Vector3(0.0, -0.5, 0.0)
-	launch_pad.add_child(launch_pad_mesh)
+	var tower := MeshInstance3D.new()
+	var tower_mesh := CylinderMesh.new()
+	tower_mesh.top_radius = 4.8
+	tower_mesh.bottom_radius = 5.6
+	tower_mesh.height = 18.0
+	tower_mesh.radial_segments = 24
+	tower.mesh = tower_mesh
+	tower.position = Vector3(0.0, 9.0, 0.0)
+	tower.rotation_degrees.x = 0.0
+	launch_pad.add_child(tower)
+
+	var landing_stand := MeshInstance3D.new()
+	var stand_mesh := CylinderMesh.new()
+	stand_mesh.top_radius = 1.2
+	stand_mesh.bottom_radius = 1.2
+	stand_mesh.height = 2.5
+	stand_mesh.radial_segments = 16
+	landing_stand.mesh = stand_mesh
+	landing_stand.position = Vector3(0.0, 1.25, 0.0)
+	launch_pad.add_child(landing_stand)
+
+	launch_pad_mesh = tower
+	launch_pad_marker = null
+
+	var pad_mat := StandardMaterial3D.new()
+	pad_mat.albedo_color = Color(0.18, 0.18, 0.2, 1.0)
+	pad_mat.roughness = 0.7
+	tower.material_override = pad_mat
+	landing_stand.material_override = pad_mat
 	launch_pad.visible = false

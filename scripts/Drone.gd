@@ -29,6 +29,7 @@ const BATTERY_HOVER_DRAIN_MULTIPLIER := 0.72
 const BATTERY_LOW_WARNING_PERCENT := 20.0
 const BATTERY_CRITICAL_PERCENT := 8.0
 const BATTERY_AUTO_LAND_PERCENT := 3.0
+const BATTERY_CONTROL_SLOWDOWN_START_PERCENT := 12.0
 
 var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 var hover_enabled = false
@@ -233,6 +234,9 @@ func _find_propellers(node):
 
 func _physics_process(delta):
 	if get_tree().paused: return
+	if battery_exhausted:
+		_apply_battery_lockout()
+		return
 
 	wind_phase += delta * (1.2 + wind_strength * 0.08)
 	_update_battery(delta)
@@ -348,6 +352,9 @@ func _apply_input_forces(delta, input_vec: Vector4):
 			prop.rotate_y(delta * prop_speed)
 
 func set_input_vector(input_vec: Vector4) -> void:
+	if battery_exhausted:
+		smoothed_input = Vector4.ZERO
+		return
 	smoothed_input = input_vec
 
 func get_battery_percent() -> float:
@@ -380,6 +387,9 @@ func start_battery_recharge() -> void:
 	battery_auto_landing = true
 	battery_low_warning = true
 	battery_critical = true
+	battery_exhausted = false
+	set_sleeping(false)
+	gravity_scale = 0.0 if hover_enabled else 1.0
 	print("Drone: Recharge sequence started.")
 
 func set_battery_percent(value: float) -> void:
@@ -388,6 +398,8 @@ func set_battery_percent(value: float) -> void:
 	battery_critical = battery_percent <= BATTERY_CRITICAL_PERCENT
 	battery_auto_landing = battery_percent <= BATTERY_AUTO_LAND_PERCENT
 	battery_exhausted = battery_percent <= 0.01
+	if battery_exhausted:
+		_apply_battery_lockout()
 
 func _update_battery(delta: float) -> void:
 	if battery_exhausted:
@@ -435,18 +447,33 @@ func _update_battery(delta: float) -> void:
 
 	if battery_auto_landing:
 		# Reduce available power to mimic the final reserve behavior of consumer drones.
-		speed_multiplier = min(speed_multiplier, 0.65)
+		var low_battery_scale := _get_low_battery_control_scale()
+		speed_multiplier = min(speed_multiplier, low_battery_scale)
 		gravity_scale = 1.0
 		if not hover_enabled:
 			hover_enabled = true
 			apply_hover_mode()
+		# Keep the drone from drifting into a hard crash when the battery is nearly empty.
+		linear_velocity *= low_battery_scale
+		angular_velocity *= low_battery_scale
 
 	if battery_exhausted:
-		smoothed_input = Vector4.ZERO
-		smoothed_input_internal = Vector4.ZERO
-		linear_velocity *= 0.92
-		angular_velocity *= 0.92
-		apply_central_force(Vector3.DOWN * 0.5)
+		_apply_battery_lockout()
+
+func _get_low_battery_control_scale() -> float:
+	if battery_percent <= BATTERY_CONTROL_SLOWDOWN_START_PERCENT:
+		var t := clampf(battery_percent / BATTERY_CONTROL_SLOWDOWN_START_PERCENT, 0.0, 1.0)
+		return lerp(0.55, 1.0, t)
+	return 1.0
+
+func _apply_battery_lockout() -> void:
+	smoothed_input = Vector4.ZERO
+	smoothed_input_internal = Vector4.ZERO
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	gravity_scale = 0.0
+	hover_enabled = false
+	set_sleeping(true)
 
 
 func apply_hover_mode():
