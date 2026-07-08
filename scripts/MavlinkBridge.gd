@@ -11,7 +11,7 @@ signal control_sent(payload: Dictionary)
 @export var remote_host: String = "127.0.0.1"
 @export var remote_port: int = 14551
 @export var control_host: String = "127.0.0.1"
-@export var control_port: int = 14551
+@export var control_port: int = 14552
 @export var heartbeat_timeout_sec: float = 3.0
 @export var telemetry_rate_hz: float = 20.0
 
