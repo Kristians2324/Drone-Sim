@@ -1,8 +1,13 @@
 extends Node3D
 
 @export var drone_scene: PackedScene = preload("res://scenes/Drone.tscn")
+@export var use_mavlink_bridge: bool = false
+@export var mavlink_listen_port: int = 14550
+@export var mavlink_remote_host: String = "127.0.0.1"
+@export var mavlink_remote_port: int = 14551
 var drone: RigidBody3D = null
 var drone_input = null
+var mavlink_bridge: MavlinkBridge = null
 
 var swarm_controller = null
 var swarm_mode: bool = false
@@ -120,8 +125,12 @@ func _ready():
 
 	drone_input = preload("res://scripts/drone/DroneInput.gd").new()
 	drone_input.initialize(3.5)
+	drone_input.input_sampled.connect(_on_drone_input_sampled)
+	_setup_mavlink_bridge()
 
 	spawn_drone()
+	if mavlink_bridge and is_instance_valid(mavlink_bridge):
+		mavlink_bridge.control_received.connect(_on_mavlink_control_received)
 
 func spawn_drone():
 	if drone and is_instance_valid(drone):
@@ -134,6 +143,21 @@ func spawn_drone():
 
 	update_camera_views()
 	print("DroneControllerManager: Spawned player drone.")
+
+func _setup_mavlink_bridge() -> void:
+	if not use_mavlink_bridge:
+		return
+	mavlink_bridge = MavlinkBridge.new()
+	mavlink_bridge.enabled = true
+	mavlink_bridge.listen_port = mavlink_listen_port
+	mavlink_bridge.set_endpoint(mavlink_remote_host, mavlink_remote_port)
+	add_child(mavlink_bridge)
+	mavlink_bridge.connection_changed.connect(_on_mavlink_connection_changed)
+	mavlink_bridge.heartbeat_received.connect(_on_mavlink_heartbeat_received)
+
+func _on_drone_input_sampled(input_vec: Vector4) -> void:
+	if mavlink_bridge and is_instance_valid(mavlink_bridge):
+		mavlink_bridge.send_control_input(input_vec)
 
 func cleanup():
 	if tp_camera: tp_camera.current = false
@@ -242,7 +266,7 @@ func _physics_process(delta):
 			if show_mode == ShowMode.STAR_FORMATION:
 				process_show_mode(delta)
 			else:
-				var input_vec = drone_input.get_smoothed_input(delta)
+				var input_vec = _get_control_input(delta)
 				drone.set_input_vector(input_vec)
 		FlightState.AUTOPILOT:
 			process_autopilot_flight(delta)
@@ -253,6 +277,22 @@ func _physics_process(delta):
 
 func get_drone() -> RigidBody3D:
 	return drone
+
+func _get_control_input(delta: float) -> Vector4:
+	if mavlink_bridge and use_mavlink_bridge:
+		return drone_input.smoothed_input if drone_input else Vector4.ZERO
+	return drone_input.get_smoothed_input(delta) if drone_input else Vector4.ZERO
+
+func _on_mavlink_control_received(control: Vector4) -> void:
+	if not drone_input:
+		return
+	drone_input.smoothed_input = control
+
+func _on_mavlink_connection_changed(connected: bool) -> void:
+	print("DroneControllerManager: MAVLink bridge ", "connected" if connected else "disconnected")
+
+func _on_mavlink_heartbeat_received(sys_id: int, comp_id: int) -> void:
+	print("DroneControllerManager: MAVLink heartbeat received from sys ", sys_id, " comp ", comp_id)
 
 func _update_low_battery_behavior(delta: float) -> void:
 	if not drone or not is_instance_valid(drone):
