@@ -7,6 +7,33 @@ class_name WorldDetails
 
 var tree_colors = [Color(0.1, 0.4, 0.1), Color(0.15, 0.35, 0.1), Color(0.2, 0.4, 0.15)]
 
+const WALL_ALBEDO := preload("res://assets/textures/real_bark_albedo.png")
+const WALL_NORMAL := preload("res://assets/textures/wall_normal.png")
+const METAL_ALBEDO := preload("res://assets/textures/real_rock_albedo.png")
+const METAL_NORMAL := preload("res://assets/textures/metal_normal.png")
+
+func _build_tree_material() -> StandardMaterial3D:
+	var tree_mat := StandardMaterial3D.new()
+	tree_mat.albedo_texture = WALL_ALBEDO
+	tree_mat.normal_texture = WALL_NORMAL
+	tree_mat.normal_enabled = true
+	tree_mat.roughness = 0.96
+	tree_mat.uv1_scale = Vector3(1.75, 1.75, 1.75)
+	tree_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return tree_mat
+
+func _build_rock_material() -> StandardMaterial3D:
+	var rock_mat := StandardMaterial3D.new()
+	rock_mat.albedo_texture = METAL_ALBEDO
+	rock_mat.normal_texture = METAL_NORMAL
+	rock_mat.normal_enabled = true
+	rock_mat.roughness = 1.0
+	rock_mat.metallic = 0.0
+	rock_mat.albedo_color = Color(0.72, 0.72, 0.75)
+	rock_mat.uv1_scale = Vector3(1.1, 1.1, 1.1)
+	rock_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return rock_mat
+
 func generate():
 	seed(42)
 	generate_trees()
@@ -22,9 +49,7 @@ func generate_trees():
 	tree_mesh.top_radius = 0.0
 	tree_mesh.bottom_radius = 2.0
 	tree_mesh.height = 6.0
-	var tree_mat = StandardMaterial3D.new()
-	tree_mat.albedo_color = Color(0.1, 0.3, 0.1)
-	tree_mesh.material = tree_mat
+	tree_mesh.material = _build_tree_material()
 	
 	mm.mesh = tree_mesh
 	tree_multimesh.multimesh = mm
@@ -59,10 +84,7 @@ func generate_rocks():
 		rock.radius = randf_range(2.0, 5.0)
 		rock.radial_segments = 6
 		rock.rings = 4
-		var rock_mat = StandardMaterial3D.new()
-		rock_mat.albedo_color = Color(0.4, 0.4, 0.43)
-		rock_mat.roughness = 0.9
-		rock.material = rock_mat
+		rock.material = _build_rock_material()
 		
 		var rock_pos = Vector3(randf_range(-forest_radius, forest_radius), -1, randf_range(-forest_radius, forest_radius))
 		rock.position = rock_pos

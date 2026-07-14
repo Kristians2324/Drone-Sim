@@ -3,11 +3,36 @@ class_name Town
 
 @export var grid_size: int = 5
 @export var spacing: float = 15.0
+@export_file("*.tscn") var house_scene_path: String = "res://scenes/House.tscn"
 
-var house_scene = preload("res://scenes/House.tscn")
+const FLOOR_ALBEDO := preload("res://assets/textures/floor_albedo.png")
+const FLOOR_NORMAL := preload("res://assets/textures/floor_normal.png")
+
+var house_scene: PackedScene
+
+func _ready():
+	if house_scene_path != "":
+		house_scene = load(house_scene_path)
+
+func _build_lot_material() -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = FLOOR_ALBEDO
+	mat.normal_texture = FLOOR_NORMAL
+	mat.normal_enabled = true
+	mat.roughness = 1.0
+	mat.albedo_color = Color(0.44, 0.41, 0.35)
+	mat.uv1_scale = Vector3(3.5, 3.5, 3.5)
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	return mat
 
 func generate():
 	seed(123)
+	if house_scene == null:
+		if house_scene_path != "":
+			house_scene = load(house_scene_path)
+	if house_scene == null:
+		push_error("Town: house scene path could not be loaded: %s" % house_scene_path)
+		return
 	
 	for x in range(grid_size):
 		for z in range(grid_size):
@@ -28,7 +53,5 @@ func generate():
 			lot.size = Vector3(spacing * 0.8, 0.1, spacing * 0.8)
 			lot.use_collision = true
 			lot.position = house.position - Vector3(0, 0.05, 0)
-			var mat = StandardMaterial3D.new()
-			mat.albedo_color = Color(0.3, 0.25, 0.2)
-			lot.material = mat
+			lot.material = _build_lot_material()
 			add_child(lot)
