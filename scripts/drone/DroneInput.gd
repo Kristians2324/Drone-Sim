@@ -1,6 +1,8 @@
 extends Node
 class_name DroneInput
 
+signal input_sampled(input: Vector4)
+
 var input_smoothing: float
 var smoothed_input = Vector4.ZERO
 
@@ -16,4 +18,5 @@ func get_smoothed_input(delta: float) -> Vector4:
 	)
 	
 	smoothed_input = smoothed_input.lerp(target, delta * input_smoothing)
+	input_sampled.emit(smoothed_input)
 	return smoothed_input

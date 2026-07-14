@@ -1,8 +1,13 @@
 extends Node3D
 
 @export var drone_scene: PackedScene = preload("res://scenes/Drone.tscn")
+@export var use_mavlink_bridge: bool = false
+@export var mavlink_listen_port: int = 14550
+@export var mavlink_remote_host: String = "127.0.0.1"
+@export var mavlink_remote_port: int = 14551
 var drone: RigidBody3D = null
 var drone_input = null
+var mavlink_bridge: MavlinkBridge = null
 
 var swarm_controller = null
 var swarm_mode: bool = false
@@ -28,6 +33,10 @@ var show_camera_presets: Array[Vector3] = [
 ]
 var launch_pad: StaticBody3D = null
 var launch_pad_mesh: MeshInstance3D = null
+var launch_pad_marker: MeshInstance3D = null
+var recharge_structure: Node3D = null
+var low_battery_return_active: bool = false
+var low_battery_landing_active: bool = false
 
 enum FlightState { MANUAL, AUTOPILOT, TRICK_LOOP, TRICK_BARREL }
 var flight_state = FlightState.MANUAL
@@ -116,8 +125,12 @@ func _ready():
 
 	drone_input = preload("res://scripts/drone/DroneInput.gd").new()
 	drone_input.initialize(3.5)
+	drone_input.input_sampled.connect(_on_drone_input_sampled)
+	_setup_mavlink_bridge()
 
 	spawn_drone()
+	if mavlink_bridge and is_instance_valid(mavlink_bridge):
+		mavlink_bridge.control_received.connect(_on_mavlink_control_received)
 
 func spawn_drone():
 	if drone and is_instance_valid(drone):
@@ -126,9 +139,25 @@ func spawn_drone():
 	drone = drone_scene.instantiate()
 	get_parent().call_deferred("add_child", drone)
 	drone.call_deferred("set", "global_position", Vector3(0, 5, 0))
+	recharge_structure = launch_pad
 
 	update_camera_views()
 	print("DroneControllerManager: Spawned player drone.")
+
+func _setup_mavlink_bridge() -> void:
+	if not use_mavlink_bridge:
+		return
+	mavlink_bridge = MavlinkBridge.new()
+	mavlink_bridge.enabled = true
+	mavlink_bridge.listen_port = mavlink_listen_port
+	mavlink_bridge.set_endpoint(mavlink_remote_host, mavlink_remote_port)
+	add_child(mavlink_bridge)
+	mavlink_bridge.connection_changed.connect(_on_mavlink_connection_changed)
+	mavlink_bridge.heartbeat_received.connect(_on_mavlink_heartbeat_received)
+
+func _on_drone_input_sampled(input_vec: Vector4) -> void:
+	if mavlink_bridge and is_instance_valid(mavlink_bridge):
+		mavlink_bridge.send_control_input(input_vec)
 
 func cleanup():
 	if tp_camera: tp_camera.current = false
@@ -176,6 +205,8 @@ func _process(delta):
 
 	if not drone or not is_instance_valid(drone):
 		return
+
+	_update_low_battery_behavior(delta)
 
 	if Input.is_key_pressed(KEY_C) and camera_toggle_cooldown <= 0:
 		is_first_person = !is_first_person
@@ -235,7 +266,7 @@ func _physics_process(delta):
 			if show_mode == ShowMode.STAR_FORMATION:
 				process_show_mode(delta)
 			else:
-				var input_vec = drone_input.get_smoothed_input(delta)
+				var input_vec = _get_control_input(delta)
 				drone.set_input_vector(input_vec)
 		FlightState.AUTOPILOT:
 			process_autopilot_flight(delta)
@@ -243,6 +274,93 @@ func _physics_process(delta):
 			process_trick_loop(delta)
 		FlightState.TRICK_BARREL:
 			process_trick_barrel(delta)
+
+func get_drone() -> RigidBody3D:
+	return drone
+
+func _get_control_input(delta: float) -> Vector4:
+	if mavlink_bridge and use_mavlink_bridge:
+		return drone_input.smoothed_input if drone_input else Vector4.ZERO
+	return drone_input.get_smoothed_input(delta) if drone_input else Vector4.ZERO
+
+func _on_mavlink_control_received(control: Vector4) -> void:
+	if not drone_input:
+		return
+	drone_input.smoothed_input = control
+
+func _on_mavlink_connection_changed(connected: bool) -> void:
+	print("DroneControllerManager: MAVLink bridge ", "connected" if connected else "disconnected")
+
+func _on_mavlink_heartbeat_received(sys_id: int, comp_id: int) -> void:
+	print("DroneControllerManager: MAVLink heartbeat received from sys ", sys_id, " comp ", comp_id)
+
+func _update_low_battery_behavior(delta: float) -> void:
+	if not drone or not is_instance_valid(drone):
+		return
+
+	if drone.has_method("is_battery_empty") and drone.is_battery_empty():
+		return
+
+	if not drone.has_method("is_battery_auto_landing") or not drone.is_battery_auto_landing():
+		low_battery_return_active = false
+		low_battery_landing_active = false
+		return
+
+	var target := _get_recharge_target()
+	if target == null:
+		return
+
+	# If the drone is already sitting on the pad, trigger recharge immediately.
+	if drone.global_position.distance_to(target.global_position) <= 3.5:
+		if drone.has_method("apply_hover_mode"):
+			drone.hover_enabled = true
+			drone.apply_hover_mode()
+		if drone.has_method("start_battery_recharge"):
+			drone.start_battery_recharge()
+		low_battery_return_active = false
+		low_battery_landing_active = false
+		return
+
+	low_battery_return_active = true
+	var target_pos := target.global_position + Vector3.UP * 2.0
+	var to_target := target_pos - drone.global_position
+	var distance := to_target.length()
+	var direction := to_target.normalized() if distance > 0.01 else Vector3.ZERO
+
+	if not drone.has_method("set_input_vector"):
+		return
+
+	# Steer gently toward the recharge structure.
+	var input := Vector4.ZERO
+	var local_dir := drone.global_transform.basis.inverse() * direction
+	input.x = clamp((target_pos.y - drone.global_position.y) * 0.12, -0.55, 0.65)
+	input.z = clamp(-local_dir.z * 0.6, -0.75, 0.75)
+	input.w = clamp(local_dir.x * 0.6, -0.75, 0.75)
+
+	# If we're close, level out and land.
+	if distance < 10.0:
+		low_battery_landing_active = true
+		input.x = -0.15 if drone.global_position.y > target.global_position.y + 0.6 else 0.0
+		input.z = 0.0
+		input.w = 0.0
+
+	drone.set_input_vector(input)
+
+	if low_battery_landing_active and distance < 4.0:
+		if drone.has_method("apply_hover_mode"):
+			drone.hover_enabled = true
+			drone.apply_hover_mode()
+		if drone.has_method("start_battery_recharge"):
+			drone.start_battery_recharge()
+			low_battery_return_active = false
+			low_battery_landing_active = false
+
+func _get_recharge_target() -> Node3D:
+	if recharge_structure and is_instance_valid(recharge_structure):
+		return recharge_structure
+	if launch_pad and is_instance_valid(launch_pad):
+		return launch_pad
+	return null
 
 func get_terrain_height_at(pos: Vector3) -> float:
 	var space_state = drone.get_world_3d().direct_space_state
@@ -291,7 +409,7 @@ func process_autopilot_flight(delta):
 		
 	var check_pos = drone.global_position + forward_dir * look_ahead_dist
 	var terrain_height_ahead = get_terrain_height_at(check_pos)
-	var terrain_height_below = get_terrain_height_at(drone.global_position)
+	var terrain_height_below: float = get_terrain_height_at(drone.global_position)
 	
 	var flight_min_clearance = 12.0
 	var safe_y = max(terrain_height_below + flight_min_clearance, terrain_height_ahead + flight_min_clearance)
@@ -576,6 +694,8 @@ func disable_show_mode():
 func show_pad_always_visible(enabled: bool) -> void:
 	if launch_pad and is_instance_valid(launch_pad):
 		launch_pad.visible = enabled
+	if launch_pad_marker and is_instance_valid(launch_pad_marker):
+		launch_pad_marker.visible = enabled
 
 func advance_show_mode() -> void:
 	show_mode_sequence_index = (show_mode_sequence_index + 1) % show_mode_sequence.size()
@@ -730,21 +850,46 @@ func create_launch_pad() -> void:
 	if launch_pad and is_instance_valid(launch_pad):
 		return
 	launch_pad = StaticBody3D.new()
-	launch_pad.name = "ShowLaunchPad"
+	launch_pad.name = "RechargeTower"
 	launch_pad.collision_layer = 1
 	launch_pad.collision_mask = 1
 	add_child(launch_pad)
 
 	var collision_shape: CollisionShape3D = CollisionShape3D.new()
-	var shape: BoxShape3D = BoxShape3D.new()
-	shape.size = Vector3(80.0, 1.0, 80.0)
-	collision_shape.shape = shape
+	var tower_shape: CylinderShape3D = CylinderShape3D.new()
+	tower_shape.height = 18.0
+	tower_shape.radius = 4.5
+	collision_shape.shape = tower_shape
+	collision_shape.position = Vector3(0.0, 9.0, 0.0)
 	launch_pad.add_child(collision_shape)
 
-	launch_pad_mesh = MeshInstance3D.new()
-	var box_mesh: BoxMesh = BoxMesh.new()
-	box_mesh.size = Vector3(80.0, 1.0, 80.0)
-	launch_pad_mesh.mesh = box_mesh
-	launch_pad_mesh.position = Vector3(0.0, -0.5, 0.0)
-	launch_pad.add_child(launch_pad_mesh)
+	var tower := MeshInstance3D.new()
+	var tower_mesh := CylinderMesh.new()
+	tower_mesh.top_radius = 4.8
+	tower_mesh.bottom_radius = 5.6
+	tower_mesh.height = 18.0
+	tower_mesh.radial_segments = 24
+	tower.mesh = tower_mesh
+	tower.position = Vector3(0.0, 9.0, 0.0)
+	tower.rotation_degrees.x = 0.0
+	launch_pad.add_child(tower)
+
+	var landing_stand := MeshInstance3D.new()
+	var stand_mesh := CylinderMesh.new()
+	stand_mesh.top_radius = 1.2
+	stand_mesh.bottom_radius = 1.2
+	stand_mesh.height = 2.5
+	stand_mesh.radial_segments = 16
+	landing_stand.mesh = stand_mesh
+	landing_stand.position = Vector3(0.0, 1.25, 0.0)
+	launch_pad.add_child(landing_stand)
+
+	launch_pad_mesh = tower
+	launch_pad_marker = null
+
+	var pad_mat := StandardMaterial3D.new()
+	pad_mat.albedo_color = Color(0.18, 0.18, 0.2, 1.0)
+	pad_mat.roughness = 0.7
+	tower.material_override = pad_mat
+	landing_stand.material_override = pad_mat
 	launch_pad.visible = false

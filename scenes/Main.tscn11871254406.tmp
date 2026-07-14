@@ -3,8 +3,8 @@
 [ext_resource type="Script" uid="uid://c5sikpkaigoxw" path="res://scripts/WorldManager.gd" id="5_wm"]
 [ext_resource type="Script" uid="uid://wvt6md3kbg1x" path="res://scripts/DroneControllerManager.gd" id="10_dcm"]
 [ext_resource type="Script" uid="uid://cica1p1lsjsly" path="res://scripts/DebugOverlay.gd" id="11_dbg"]
-[ext_resource type="Script" path="res://scripts/environment/WindManager.gd" id="12_wind_manager"]
-[ext_resource type="Script" path="res://scripts/ui/WindHud.gd" id="13_wind_hud"]
+[ext_resource type="Script" uid="uid://bsegds5ra01id" path="res://scripts/environment/WindManager.gd" id="12_wind_manager"]
+[ext_resource type="Script" uid="uid://ce0b5hhkrfvlm" path="res://scripts/ui/WindHud.gd" id="13_wind_hud"]
 
 [node name="Main" type="Node3D" unique_id=383992290]
 script = ExtResource("5_wm")

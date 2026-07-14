@@ -10,12 +10,44 @@ const HOVER_MIN_CLEARANCE = 2.0
 const HOVER_HOLD_FORCE = 55.0
 const HOVER_HOLD_DAMPING = 12.0
 const HOVER_MAX_HOLD_FORCE = 90.0
+const MAX_PITCH_DEGREES = 30.0
+const MAX_TILT_DEGREES = 35.0
+const WIND_FORCE_SCALE = 18.0
+const WIND_LIFT_SCALE = 2.4
+const WIND_DRAG_SCALE = 0.45
+const WIND_HOVER_BOBBLE_SCALE = 1.35
+const WIND_ROTATION_SCALE = 0.28
+
+# DJI Mini 4K-inspired battery behavior:
+# - About 20 minutes of flight under normal use
+# - Drain rate increases with aggressive maneuvering / high thrust
+# - Low battery warning and automatic landing reserve near the end
+const BATTERY_CAPACITY_MINUTES := 20.0
+const BATTERY_DRAIN_PER_SECOND := 100.0 / (BATTERY_CAPACITY_MINUTES * 60.0)
+const BATTERY_AGGRESSIVE_DRAIN_MULTIPLIER := 1.85
+const BATTERY_HOVER_DRAIN_MULTIPLIER := 0.72
+const BATTERY_LOW_WARNING_PERCENT := 20.0
+const BATTERY_CRITICAL_PERCENT := 8.0
+const BATTERY_AUTO_LAND_PERCENT := 3.0
+const BATTERY_CONTROL_SLOWDOWN_START_PERCENT := 12.0
 
 var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
 var hover_enabled = false
 var speed_multiplier: float = 1.0
+var wind_velocity: Vector3 = Vector3.ZERO
+var wind_strength: float = 0.0
+var wind_gust_factor: float = 0.25
+var wind_state_name: String = "Normal"
+var wind_phase: float = 0.0
 
 var low_cost_mode: bool = false
+var battery_percent: float = 100.0
+var battery_low_warning: bool = false
+var battery_critical: bool = false
+var battery_auto_landing: bool = false
+var battery_failed: bool = false
+var battery_exhausted: bool = false
+var battery_recharging: bool = false
 
 func set_swarm_mode_active(active: bool):
 	speed_multiplier = 1.6 if active else 1.0
@@ -202,8 +234,20 @@ func _find_propellers(node):
 
 func _physics_process(delta):
 	if get_tree().paused: return
+	if battery_exhausted:
+		_apply_battery_lockout()
+		return
+
+	wind_phase += delta * (1.2 + wind_strength * 0.08)
+	_update_battery(delta)
 
 	_apply_input_forces(delta, smoothed_input)
+
+	if battery_auto_landing:
+		# Simulate DJI-style reserve behavior by softening control response as battery gets extremely low.
+		smoothed_input.y = 0.0
+		smoothed_input.z = 0.0
+		smoothed_input.w = 0.0
 
 var smoothed_input_internal = Vector4.ZERO
 
@@ -224,8 +268,34 @@ func _apply_input_forces(delta, input_vec: Vector4):
 	var vertical_thrust = local_up * smoothed_input_internal.x * THROTTLE_POWER * speed_multiplier
 	var forward_force = forward_dir * smoothed_input_internal.z * FORWARD_POWER * speed_multiplier
 	var strafe_force = strafe_dir * smoothed_input_internal.w * FORWARD_POWER * speed_multiplier
+	var wind_force := Vector3.ZERO
+	var wind_bobble := Vector3.ZERO
+	var wind_drag_factor := 1.0
 
-	apply_central_force(vertical_thrust + forward_force + strafe_force)
+	if wind_strength > 0.0:
+		var wind_dir := wind_velocity.normalized() if not wind_velocity.is_zero_approx() else Vector3.ZERO
+		if not wind_dir.is_zero_approx():
+			var forward_component := -forward_dir.dot(wind_dir)
+			var right_component := strafe_dir.dot(wind_dir)
+			var up_component := Vector3.UP.dot(wind_dir)
+			wind_drag_factor = clamp(1.0 - forward_component * WIND_DRAG_SCALE, 0.55, 1.35)
+			var gust := 0.65 + (wind_gust_factor * 0.9) + (sin(wind_phase * 1.7) * 0.15)
+			wind_force = wind_dir * (wind_strength * WIND_FORCE_SCALE * gust)
+			wind_force += Vector3.UP * (wind_strength * WIND_LIFT_SCALE * (0.35 + wind_gust_factor * 0.65) * sin(wind_phase * 2.6))
+			wind_force += strafe_dir * (wind_strength * right_component * 2.0 * gust)
+			wind_force += forward_dir * (wind_strength * forward_component * 1.2 * gust)
+			if hover_enabled:
+				wind_bobble = Vector3(
+					wind_strength * right_component * WIND_HOVER_BOBBLE_SCALE * sin(wind_phase * 2.2),
+					wind_strength * WIND_HOVER_BOBBLE_SCALE * 0.45 * sin(wind_phase * 3.4),
+					wind_strength * forward_component * WIND_HOVER_BOBBLE_SCALE * cos(wind_phase * 1.8)
+				)
+
+	forward_force *= wind_drag_factor
+	strafe_force *= lerp(wind_drag_factor, 1.0, 0.2)
+	vertical_thrust += wind_force * 0.12
+
+	apply_central_force(vertical_thrust + forward_force + strafe_force + wind_force + wind_bobble)
 
 	if hover_enabled:
 		var space_state = get_world_3d().direct_space_state
@@ -243,8 +313,8 @@ func _apply_input_forces(delta, input_vec: Vector4):
 					hover_force = clamp(hover_force, 0.0, HOVER_MAX_HOLD_FORCE)
 					apply_central_force(Vector3.UP * hover_force)
 
-	apply_torque(global_transform.basis.x * -smoothed_input_internal.z * TURN_POWER * speed_multiplier)
-	apply_torque(global_transform.basis.z * -smoothed_input_internal.w * TURN_POWER * speed_multiplier)
+	apply_torque(global_transform.basis.x * (-smoothed_input_internal.z * TURN_POWER * speed_multiplier + wind_force.z * WIND_ROTATION_SCALE))
+	apply_torque(global_transform.basis.z * (-smoothed_input_internal.w * TURN_POWER * speed_multiplier + wind_force.x * WIND_ROTATION_SCALE))
 	apply_torque(global_transform.basis.y * -smoothed_input_internal.y * TURN_POWER * speed_multiplier)
 
 	var up = global_transform.basis.y
@@ -256,6 +326,22 @@ func _apply_input_forces(delta, input_vec: Vector4):
 		
 	apply_torque(correction * current_stabilize)
 
+	# Keep the drone within the configured attitude limits.
+	var current_pitch = rad_to_deg(get_rotation().x)
+	var current_tilt = max(abs(rad_to_deg(get_rotation().z)), abs(rad_to_deg(get_rotation().x)))
+	if abs(current_pitch) > MAX_PITCH_DEGREES:
+		var pitch_correction = clamp(-current_pitch * 0.05, -1.0, 1.0)
+		apply_torque(global_transform.basis.x * pitch_correction * TURN_POWER * speed_multiplier)
+	if current_tilt > MAX_TILT_DEGREES:
+		var tilt_error = current_tilt - MAX_TILT_DEGREES
+		var tilt_correction = clamp(tilt_error * 0.05, 0.0, 1.0)
+		apply_torque(global_transform.basis.z * tilt_correction * TURN_POWER * speed_multiplier)
+
+	# Keep hover mode visibly alive in the wind without making it uncontrollable.
+	if hover_enabled and wind_strength > 0.0:
+		apply_torque(global_transform.basis.x * sin(wind_phase * 2.0) * wind_strength * 0.9)
+		apply_torque(global_transform.basis.z * cos(wind_phase * 1.6) * wind_strength * 0.9)
+
 	var prop_speed = 30.0 + (smoothed_input_internal.x * 60.0)
 	for prop in propellers:
 		prop.rotate_y(delta * prop_speed)
@@ -266,10 +352,141 @@ func _apply_input_forces(delta, input_vec: Vector4):
 			prop.rotate_y(delta * prop_speed)
 
 func set_input_vector(input_vec: Vector4) -> void:
+	if battery_exhausted:
+		smoothed_input = Vector4.ZERO
+		return
 	smoothed_input = input_vec
+
+func get_battery_percent() -> float:
+	return battery_percent
+
+func is_battery_low_warning() -> bool:
+	return battery_low_warning
+
+func is_battery_critical() -> bool:
+	return battery_critical
+
+func is_battery_auto_landing() -> bool:
+	return battery_auto_landing
+
+func is_battery_empty() -> bool:
+	return battery_exhausted
+
+func recharge_battery() -> void:
+	battery_percent = 100.0
+	battery_low_warning = false
+	battery_critical = false
+	battery_auto_landing = false
+	battery_failed = false
+	battery_exhausted = false
+	battery_recharging = false
+	print("Drone: Battery recharged to 100%.")
+
+func start_battery_recharge() -> void:
+	battery_recharging = true
+	battery_auto_landing = true
+	battery_low_warning = true
+	battery_critical = true
+	battery_exhausted = false
+	set_sleeping(false)
+	gravity_scale = 0.0 if hover_enabled else 1.0
+	print("Drone: Recharge sequence started.")
+
+func set_battery_percent(value: float) -> void:
+	battery_percent = clamp(value, 0.0, 100.0)
+	battery_low_warning = battery_percent <= BATTERY_LOW_WARNING_PERCENT
+	battery_critical = battery_percent <= BATTERY_CRITICAL_PERCENT
+	battery_auto_landing = battery_percent <= BATTERY_AUTO_LAND_PERCENT
+	battery_exhausted = battery_percent <= 0.01
+	if battery_exhausted:
+		_apply_battery_lockout()
+
+func _update_battery(delta: float) -> void:
+	if battery_exhausted:
+		return
+
+	if battery_recharging:
+		battery_percent = min(100.0, battery_percent + (delta * 30.0))
+		if battery_percent >= 100.0:
+			recharge_battery()
+		return
+
+	var throttle_use: float = absf(smoothed_input.x)
+	var maneuver_use: float = absf(smoothed_input.y) + absf(smoothed_input.z) + absf(smoothed_input.w)
+	var drain_multiplier: float = 1.0
+
+	# Hovering and gentle flight are a little more efficient, aggressive movement drains faster.
+	if hover_enabled:
+		drain_multiplier *= BATTERY_HOVER_DRAIN_MULTIPLIER
+	if maneuver_use > 0.15 or throttle_use > 0.15:
+		drain_multiplier *= lerp(1.0, BATTERY_AGGRESSIVE_DRAIN_MULTIPLIER, clamp(max(throttle_use, maneuver_use) / 2.0, 0.0, 1.0))
+
+	# Higher speed multipliers represent heavier workloads and slightly faster battery loss.
+	drain_multiplier *= lerp(1.0, 1.12, clamp(speed_multiplier - 1.0, 0.0, 1.0))
+
+	battery_percent = max(0.0, battery_percent - (BATTERY_DRAIN_PER_SECOND * drain_multiplier * delta))
+
+	var was_low_warning = battery_low_warning
+	var was_critical = battery_critical
+	var was_auto_landing = battery_auto_landing
+
+	battery_low_warning = battery_percent <= BATTERY_LOW_WARNING_PERCENT
+	battery_critical = battery_percent <= BATTERY_CRITICAL_PERCENT
+	battery_auto_landing = battery_percent <= BATTERY_AUTO_LAND_PERCENT
+	if battery_percent <= 0.01:
+		battery_exhausted = true
+		battery_failed = true
+		battery_percent = 0.0
+
+	if battery_low_warning and not was_low_warning:
+		print("Drone: Battery low (", snappedf(battery_percent, 0.1), "%)")
+	if battery_critical and not was_critical:
+		print("Drone: Battery critical (", snappedf(battery_percent, 0.1), "%)")
+	if battery_auto_landing and not was_auto_landing:
+		print("Drone: Battery reserve reached - auto landing recommended.")
+
+	if battery_auto_landing:
+		# Reduce available power to mimic the final reserve behavior of consumer drones.
+		var low_battery_scale := _get_low_battery_control_scale()
+		speed_multiplier = min(speed_multiplier, low_battery_scale)
+		gravity_scale = 1.0
+		if not hover_enabled:
+			hover_enabled = true
+			apply_hover_mode()
+		# Keep the drone from drifting into a hard crash when the battery is nearly empty.
+		linear_velocity *= low_battery_scale
+		angular_velocity *= low_battery_scale
+
+	if battery_exhausted:
+		_apply_battery_lockout()
+
+func _get_low_battery_control_scale() -> float:
+	if battery_percent <= BATTERY_CONTROL_SLOWDOWN_START_PERCENT:
+		var t := clampf(battery_percent / BATTERY_CONTROL_SLOWDOWN_START_PERCENT, 0.0, 1.0)
+		return lerp(0.55, 1.0, t)
+	return 1.0
+
+func _apply_battery_lockout() -> void:
+	smoothed_input = Vector4.ZERO
+	smoothed_input_internal = Vector4.ZERO
+	linear_velocity = Vector3.ZERO
+	angular_velocity = Vector3.ZERO
+	gravity_scale = 0.0
+	hover_enabled = false
+	set_sleeping(true)
+
 
 func apply_hover_mode():
 	gravity_scale = 0.0 if hover_enabled else 1.0
+
+func set_wind_profile(direction: Vector3, strength: float, gust_factor: float, state_name: String) -> void:
+	wind_velocity = direction.normalized() if not direction.is_zero_approx() else Vector3.ZERO
+	wind_strength = maxf(strength, 0.0)
+	wind_gust_factor = clampf(gust_factor, 0.0, 1.0)
+	wind_state_name = state_name
+
+func set_wind(direction: Vector3, strength: float) -> void:
+	set_wind_profile(direction, strength, wind_gust_factor, wind_state_name)
 
 func get_propeller_count() -> int:
 	return propellers.size()

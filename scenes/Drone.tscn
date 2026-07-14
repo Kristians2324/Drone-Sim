@@ -3,29 +3,29 @@
 [ext_resource type="Script" path="res://scripts/Drone.gd" id="1_rvslj"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_DroneBody"]
-albedo_color = Color(0.15, 0.15, 0.2, 1)
-metallic = 0.8
-roughness = 0.2
+albedo_color = Color(0.92, 0.93, 0.95, 1)
+metallic = 0.18
+roughness = 0.42
 
 [sub_resource type="BoxMesh" id="BoxMesh_Body"]
-size = Vector3(0.4, 0.15, 0.6)
+size = Vector3(0.46, 0.14, 0.58)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_DroneArm"]
-albedo_color = Color(0.3, 0.3, 0.35, 1)
-metallic = 0.7
-roughness = 0.3
+albedo_color = Color(0.82, 0.83, 0.86, 1)
+metallic = 0.12
+roughness = 0.5
 
 [sub_resource type="BoxMesh" id="BoxMesh_Arm"]
-size = Vector3(0.1, 0.05, 0.8)
+size = Vector3(0.08, 0.04, 0.72)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Propeller"]
 transparency = 1
-albedo_color = Color(0.1, 0.1, 0.1, 0.8)
-metallic = 0.5
+albedo_color = Color(0.05, 0.05, 0.05, 0.72)
+metallic = 0.15
 
 [sub_resource type="CylinderMesh" id="CylinderMesh_Prop"]
-top_radius = 0.25
-bottom_radius = 0.25
+top_radius = 0.22
+bottom_radius = 0.22
 height = 0.01
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_Drone"]
@@ -37,40 +37,42 @@ angular_damp = 6.0
 script = ExtResource("1_rvslj")
 
 [node name="Design" type="Node3D" parent="."]
+scale = Vector3(0.92, 0.92, 0.92)
 
 [node name="Body" type="MeshInstance3D" parent="Design"]
 material_override = SubResource("StandardMaterial3D_DroneBody")
 mesh = SubResource("BoxMesh_Body")
+position = Vector3(0, 0.02, 0)
 
 [node name="Arm1" type="MeshInstance3D" parent="Design"]
-transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 0, 0, 0)
+transform = Transform3D(0.707107, 0, 0.707107, 0, 1, 0, -0.707107, 0, 0.707107, 0, 0.02, 0)
 material_override = SubResource("StandardMaterial3D_DroneArm")
 mesh = SubResource("BoxMesh_Arm")
 
 [node name="Arm2" type="MeshInstance3D" parent="Design"]
-transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, 0, 0, 0)
+transform = Transform3D(0.707107, 0, -0.707107, 0, 1, 0, 0.707107, 0, 0.707107, 0, 0.02, 0)
 material_override = SubResource("StandardMaterial3D_DroneArm")
 mesh = SubResource("BoxMesh_Arm")
 
 [node name="Props" type="Node3D" parent="Design"]
 
 [node name="Prop1" type="MeshInstance3D" parent="Design/Props"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, 0.1, 0.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, 0.12, 0.34)
 material_override = SubResource("StandardMaterial3D_Propeller")
 mesh = SubResource("CylinderMesh_Prop")
 
 [node name="Prop2" type="MeshInstance3D" parent="Design/Props"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0.1, 0.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.34, 0.12, 0.34)
 material_override = SubResource("StandardMaterial3D_Propeller")
 mesh = SubResource("CylinderMesh_Prop")
 
 [node name="Prop3" type="MeshInstance3D" parent="Design/Props"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.3, 0.1, -0.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.34, 0.12, -0.34)
 material_override = SubResource("StandardMaterial3D_Propeller")
 mesh = SubResource("CylinderMesh_Prop")
 
 [node name="Prop4" type="MeshInstance3D" parent="Design/Props"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.3, 0.1, -0.3)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.34, 0.12, -0.34)
 material_override = SubResource("StandardMaterial3D_Propeller")
 mesh = SubResource("CylinderMesh_Prop")
 
