@@ -1,0 +1,7 @@
+.git
+.godot
+scratch
+tests/test_output.txt
+*.tmp
+*.import
+**/*.uid

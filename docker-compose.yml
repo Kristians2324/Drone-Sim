@@ -1,0 +1,9 @@
+services:
+  drone-sim:
+    build:
+      context: .
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    tty: true
+    stdin_open: true
