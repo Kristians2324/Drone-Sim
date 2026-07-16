@@ -4,7 +4,7 @@ services:
       context: .
     working_dir: /workspace/Drone Sim
     volumes:
-      - ..:/workspace
+      - .:/workspace/Drone Sim
     tty: true
     stdin_open: true
 
@@ -12,7 +12,7 @@ services:
     image: python:3.11-slim
     working_dir: /workspace/MavLink/MavLink-Bridge
     volumes:
-      - ..:/workspace
+      - .:/workspace/Drone Sim
     command: ["python", "Bridge.py"]
     tty: true
     stdin_open: true
@@ -21,5 +21,5 @@ services:
     image: mcr.microsoft.com/windows/servercore:ltsc2022
     profiles: ["windows"]
     volumes:
-      - ..:/workspace
+      - .:/workspace/Drone Sim
     command: ["cmd", "/c", "echo Mission Planner is included as a mounted project folder for packaging and review."]

@@ -1,6 +1,7 @@
 extends MultiMeshInstance3D
 
-@export var tree_scene: PackedScene = preload("res://assets/models/tree_pine.gltf")
+@export var tree_scene_path: String = "res://tree_pine.gltf"
+@export var tree_scene: PackedScene
 @export var tree_count: int = 300
 @export var area_size: Vector2 = Vector2(1800.0, 1800.0)
 @export var area_center: Vector3 = Vector3.ZERO
@@ -18,8 +19,10 @@ var _rng := RandomNumberGenerator.new()
 
 func _ready() -> void:
 	_rng.randomize()
+	if tree_scene == null and tree_scene_path != "":
+		tree_scene = load(tree_scene_path)
 	if tree_scene == null:
-		push_warning("TreeSpawner: tree_scene is not assigned.")
+		push_warning("TreeSpawner: tree_scene is not assigned. Set tree_scene in the inspector or provide tree_scene_path.")
 		return
 
 	if multimesh == null:
@@ -43,10 +46,10 @@ func _ready() -> void:
 		for i in range(tree_count):
 			var x := _rng.randf_range(-area_size.x * 0.5, area_size.x * 0.5)
 			var z := _rng.randf_range(-area_size.y * 0.5, area_size.y * 0.5)
-			var sampled_pos := _sample_ground_position(Vector3(area_center.x + x, area_center.y, area_center.z + z), terrain_root)
+			var sampled_pos: Variant = _sample_ground_position(Vector3(area_center.x + x, area_center.y, area_center.z + z), terrain_root)
 			if sampled_pos == null:
 				continue
-			var world_pos: Vector3 = sampled_pos
+			var world_pos: Vector3 = sampled_pos as Vector3
 
 			var yaw := _rng.randf_range(0.0, TAU)
 			var scale := _rng.randf_range(min_scale, max_scale)

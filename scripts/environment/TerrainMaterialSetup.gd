@@ -1,11 +1,17 @@
 extends Node
 
 @export var terrain_material_path: NodePath
+@export var ground_texture_path: String = "res://assets/textures/real_ground_albedo.png"
 
-@export var ground_texture: Texture2D = preload("res://assets/textures/real_ground_albedo.png")
+var ground_texture: Texture2D
 
 
 func _ready() -> void:
+	ground_texture = load(ground_texture_path)
+	if ground_texture == null:
+		push_warning("TerrainMaterialSetup: could not load ground texture at %s" % ground_texture_path)
+		return
+
 	var terrain := _get_terrain_node()
 	if terrain == null:
 		push_warning("TerrainMaterialSetup: terrain node not found.")

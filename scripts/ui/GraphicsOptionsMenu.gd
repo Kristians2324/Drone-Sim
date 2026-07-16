@@ -1,6 +1,7 @@
 extends Control
 
 enum AAOption { DISABLED, MSAA_2X, MSAA_4X }
+enum ShadowMapOption { SHADOW_1024, SHADOW_2048 }
 
 @export var directional_light_path: NodePath
 
@@ -42,7 +43,26 @@ func set_shadow_quality(low: bool) -> void:
 	if light == null:
 		push_warning("GraphicsOptionsMenu: DirectionalLight3D not found.")
 		return
-	light.shadow_atlas_size = low_shadow_size if low else medium_shadow_size
+	light.shadow_enabled = true
+	light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	light.directional_shadow_max_distance = low_shadow_size if low else medium_shadow_size
+
+
+func set_shadow_map_resolution(option: int) -> void:
+	var light := _get_directional_light()
+	if light == null:
+		push_warning("GraphicsOptionsMenu: DirectionalLight3D not found.")
+		return
+
+	light.shadow_enabled = true
+	light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	match option:
+		ShadowMapOption.SHADOW_1024:
+			light.directional_shadow_max_distance = float(low_shadow_size)
+		ShadowMapOption.SHADOW_2048:
+			light.directional_shadow_max_distance = float(medium_shadow_size)
+		_:
+			push_warning("GraphicsOptionsMenu: Unknown shadow map option: %s" % option)
 
 
 func _get_directional_light() -> DirectionalLight3D:

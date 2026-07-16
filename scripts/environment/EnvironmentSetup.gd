@@ -48,8 +48,7 @@ func _apply_environment() -> void:
 		panorama.panorama = skybox_texture
 		sky.sky_material = panorama
 		env.sky = sky
-		env.sky_rotation = Vector3(0.0, 0.0, 0.0)
-		env.sky_energy_multiplier = sky_energy
+		# Keep the scene's existing sky/lighting settings intact.
 
 	if ground_albedo != null:
 		env.ambient_light_color = Color(0.88, 0.92, 0.86)
