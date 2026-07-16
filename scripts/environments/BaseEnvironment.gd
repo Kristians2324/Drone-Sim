@@ -24,5 +24,6 @@ func add_charging_station(pos: Vector3, rot: Vector3 = Vector3.ZERO, sca: Vector
 	obj.position = pos
 	obj.rotation_degrees = rot
 	obj.scale = sca
-	add_child(obj)
+	# Disabled by default to keep the environment clear unless explicitly used.
+	# add_child(obj)
 	return obj

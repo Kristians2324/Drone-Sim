@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxi6 \
     libglib2.0-0 \
     libgtk-3-0 \
-    libasound2 \
+    libasound2t64 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p ${GODOT_HOME} /workspace

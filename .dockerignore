@@ -1,3 +1,7 @@
+**/.git
+**/.venv
+**/__pycache__
+**/*.tmp
 .git
 .godot
 scratch
