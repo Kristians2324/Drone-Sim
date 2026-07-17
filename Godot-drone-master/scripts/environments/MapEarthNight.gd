@@ -38,4 +38,5 @@ func setup_environment():
 	
 	# Town
 	var town = Node3D.new()
+	town.set_script(preload("res://scripts/TownGenerator.gd"))
 	add_child(town)

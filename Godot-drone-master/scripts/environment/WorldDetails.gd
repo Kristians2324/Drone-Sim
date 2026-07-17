@@ -7,25 +7,15 @@ class_name WorldDetails
 
 var tree_colors = [Color(0.1, 0.4, 0.1), Color(0.15, 0.35, 0.1), Color(0.2, 0.4, 0.15)]
 
-const WALL_ALBEDO_PATH := "res://assets/textures/wall_albedo.png"
-const WALL_ALBEDO_FALLBACK := "res://assets/textures/wall_albedo.png"
-const WALL_NORMAL_PATH := "res://assets/textures/wall_normal.png"
-const METAL_ALBEDO_PATH := "res://assets/textures/metal_albedo.png"
-const METAL_ALBEDO_FALLBACK := "res://assets/textures/metal_albedo.png"
-const METAL_NORMAL_PATH := "res://assets/textures/metal_normal.png"
-
-
-func _load_texture(path: String, fallback_path: String = "") -> Texture2D:
-	if path != "" and ResourceLoader.exists(path):
-		return load(path) as Texture2D
-	if fallback_path != "" and ResourceLoader.exists(fallback_path):
-		return load(fallback_path) as Texture2D
-	return null
+const WALL_ALBEDO := preload("res://assets/textures/real_bark_albedo.png")
+const WALL_NORMAL := preload("res://assets/textures/wall_normal.png")
+const METAL_ALBEDO := preload("res://assets/textures/real_rock_albedo.png")
+const METAL_NORMAL := preload("res://assets/textures/metal_normal.png")
 
 func _build_tree_material() -> StandardMaterial3D:
 	var tree_mat := StandardMaterial3D.new()
-	tree_mat.albedo_texture = _load_texture(WALL_ALBEDO_PATH, WALL_ALBEDO_FALLBACK)
-	tree_mat.normal_texture = _load_texture(WALL_NORMAL_PATH)
+	tree_mat.albedo_texture = WALL_ALBEDO
+	tree_mat.normal_texture = WALL_NORMAL
 	tree_mat.normal_enabled = true
 	tree_mat.roughness = 0.96
 	tree_mat.uv1_scale = Vector3(1.75, 1.75, 1.75)
@@ -34,8 +24,8 @@ func _build_tree_material() -> StandardMaterial3D:
 
 func _build_rock_material() -> StandardMaterial3D:
 	var rock_mat := StandardMaterial3D.new()
-	rock_mat.albedo_texture = _load_texture(METAL_ALBEDO_PATH, METAL_ALBEDO_FALLBACK)
-	rock_mat.normal_texture = _load_texture(METAL_NORMAL_PATH)
+	rock_mat.albedo_texture = METAL_ALBEDO
+	rock_mat.normal_texture = METAL_NORMAL
 	rock_mat.normal_enabled = true
 	rock_mat.roughness = 1.0
 	rock_mat.metallic = 0.0

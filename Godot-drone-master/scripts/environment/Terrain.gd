@@ -3,8 +3,8 @@ class_name Terrain
 
 @export var size: Vector2 = Vector2(2000, 2000)
 
-const FLOOR_ALBEDO := preload("res://assets/textures/wall_albedo.png")
-const FLOOR_NORMAL := preload("res://assets/textures/wall_normal.png")
+const FLOOR_ALBEDO := preload("res://assets/textures/floor_albedo.png")
+const FLOOR_NORMAL := preload("res://assets/textures/floor_normal.png")
 
 func _build_ground_material() -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
