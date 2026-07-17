@@ -29,3 +29,5 @@ node_modules/
 # Temp
 *.tmp
 *.swp
+MavLink/MavLink-Bridge/.git.disabled/
+MavLink/MavLink-Bridge/__pycache__/
