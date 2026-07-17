@@ -1,6 +1,6 @@
 extends MultiMeshInstance3D
 
-@export var tree_scene_path: String = ""
+@export var tree_scene_path: String = "res://tree_pine.gltf"
 @export var tree_scene: PackedScene
 @export var tree_count: int = 300
 @export var area_size: Vector2 = Vector2(1800.0, 1800.0)
@@ -20,12 +20,9 @@ var _rng := RandomNumberGenerator.new()
 func _ready() -> void:
 	_rng.randomize()
 	if tree_scene == null and tree_scene_path != "":
-		if ResourceLoader.exists(tree_scene_path):
-			tree_scene = load(tree_scene_path)
-		else:
-			push_warning("TreeSpawner: tree scene path does not exist: %s" % tree_scene_path)
+		tree_scene = load(tree_scene_path)
 	if tree_scene == null:
-		# No tree scene configured, skip tree spawning quietly.
+		push_warning("TreeSpawner: tree_scene is not assigned. Set tree_scene in the inspector or provide tree_scene_path.")
 		return
 
 	if multimesh == null:

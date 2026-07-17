@@ -1,6 +1,6 @@
 [gd_scene load_steps=6 format=3 uid="uid://c7k8l9m0n1o2"]
 
-[; ext_resource script removed to avoid preload blocking in headless container]
+[ext_resource type="Script" path="res://scenes/Menu.gd" id="1_menu"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_bg"]
 bg_color = Color(0.1, 0.1, 0.12, 0.94)
@@ -19,6 +19,7 @@ corner_radius_bottom_left = 10
 
 [node name="Menu" type="CanvasLayer"]
 process_mode = 3
+script = ExtResource("1_menu")
 
 [node name="Dimmer" type="ColorRect" parent="."]
 anchors_preset = 15

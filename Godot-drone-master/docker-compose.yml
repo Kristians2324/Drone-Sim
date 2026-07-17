@@ -2,24 +2,17 @@ services:
   drone-sim:
     build:
       context: .
-    working_dir: /workspace
+    working_dir: /workspace/Drone Sim
     volumes:
-      - .:/workspace
-      - ../MavLink:/workspace/MavLink:ro
-      - ../Mission Planner:/workspace/Mission Planner:ro
-    command: ["godot", "--headless", "--path", "/workspace", "--verbose"]
-    restart: unless-stopped
+      - .:/workspace/Drone Sim
     tty: true
     stdin_open: true
 
   mavlink-bridge:
-    build:
-      context: ../MavLink/MavLink-Bridge
-    working_dir: /app
+    image: python:3.11-slim
+    working_dir: /workspace/MavLink/MavLink-Bridge
     volumes:
-      - ../MavLink/MavLink-Bridge:/app
-      - .:/workspace/Godot-drone-master:ro
-      - ../Mission Planner:/workspace/Mission Planner:ro
+      - .:/workspace/Drone Sim
     command: ["python", "Bridge.py"]
     tty: true
     stdin_open: true
@@ -28,7 +21,5 @@ services:
     image: mcr.microsoft.com/windows/servercore:ltsc2022
     profiles: ["windows"]
     volumes:
-      - ../Mission Planner:/workspace/Mission Planner
-      - .:/workspace/Godot-drone-master:ro
-      - ../MavLink:/workspace/MavLink:ro
-    command: ["cmd", "/c", "echo Mission Planner is packaged as a project folder for Windows-only use."]
+      - .:/workspace/Drone Sim
+    command: ["cmd", "/c", "echo Mission Planner is included as a mounted project folder for packaging and review."]

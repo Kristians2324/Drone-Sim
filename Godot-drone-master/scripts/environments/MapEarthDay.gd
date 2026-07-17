@@ -10,10 +10,10 @@ func setup_environment():
 	var terrain_scene = preload("res://scenes/Terrain.tscn").instantiate()
 	add_child(terrain_scene)
 
-	# EnvironmentSetup script disabled in container to avoid broken imports.
-	# A plain Node3D keeps scene structure while avoiding preload/compile of the script.
+	# Apply lightweight visual setup so the runtime scene actually changes.
 	var env_setup = Node3D.new()
-	# If you want visual environment setup, re-enable the script when imports are fixed.
+	env_setup.set_script(preload("res://scripts/environment/EnvironmentSetup.gd"))
+	env_setup.directional_light_path = NodePath("../Environment/DirectionalLight3D")
 	add_child(env_setup)
 
 	var terrain_setup = Node.new()
@@ -33,6 +33,7 @@ func setup_environment():
 	
 	# Town
 	var town = Node3D.new()
+	town.set_script(preload("res://scripts/TownGenerator.gd"))
 	add_child(town)
 
 	# Trees

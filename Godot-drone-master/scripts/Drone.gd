@@ -1,22 +1,128 @@
-extends Node3D
+extends RigidBody3D
 
-# Minimal Drone stub for container runtime stability. Replace with the
-# full implementation once other dependencies and imports are fixed.
+# --- POWERFUL SMOOTH FLIGHT CONFIG ---
+const THROTTLE_POWER = 180.0   
+const FORWARD_POWER = 120.0    
+const TURN_POWER = 18.0
+const STABILIZE_FORCE = 45.0
+const INPUT_SMOOTHING = 3.5
+const HOVER_MIN_CLEARANCE = 2.0
+const HOVER_HOLD_FORCE = 55.0
+const HOVER_HOLD_DAMPING = 12.0
+const HOVER_MAX_HOLD_FORCE = 90.0
+const MAX_PITCH_DEGREES = 30.0
+const MAX_TILT_DEGREES = 35.0
+const WIND_FORCE_SCALE = 18.0
+const WIND_LIFT_SCALE = 2.4
+const WIND_DRAG_SCALE = 0.45
+const WIND_HOVER_BOBBLE_SCALE = 1.35
+const WIND_ROTATION_SCALE = 0.28
 
-func _ready() -> void:
-	pass
+# DJI Mini 4K-inspired battery behavior:
+# - About 20 minutes of flight under normal use
+# - Drain rate increases with aggressive maneuvering / high thrust
+# - Low battery warning and automatic landing reserve near the end
+const BATTERY_CAPACITY_MINUTES := 20.0
+const BATTERY_DRAIN_PER_SECOND := 100.0 / (BATTERY_CAPACITY_MINUTES * 60.0)
+const BATTERY_AGGRESSIVE_DRAIN_MULTIPLIER := 1.85
+const BATTERY_HOVER_DRAIN_MULTIPLIER := 0.72
+const BATTERY_LOW_WARNING_PERCENT := 20.0
+const BATTERY_CRITICAL_PERCENT := 8.0
+const BATTERY_AUTO_LAND_PERCENT := 3.0
+const BATTERY_CONTROL_SLOWDOWN_START_PERCENT := 12.0
 
-func get_battery_percent() -> float:
-	return 100.0
+var smoothed_input = Vector4.ZERO # throttle, yaw, pitch, roll
+var hover_enabled = false
+var speed_multiplier: float = 1.0
+var wind_velocity: Vector3 = Vector3.ZERO
+var wind_strength: float = 0.0
+var wind_gust_factor: float = 0.25
+var wind_state_name: String = "Normal"
+var wind_phase: float = 0.0
 
-func is_battery_auto_landing() -> bool:
-	return false
+var low_cost_mode: bool = false
+var battery_percent: float = 100.0
+var battery_low_warning: bool = false
+var battery_critical: bool = false
+var battery_auto_landing: bool = false
+var battery_failed: bool = false
+var battery_exhausted: bool = false
+var battery_recharging: bool = false
 
-func is_battery_critical() -> bool:
-	return false
+func set_swarm_mode_active(active: bool):
+	speed_multiplier = 1.6 if active else 1.0
+	if active:
+		set_low_cost_mode(true)
+	else:
+		set_low_cost_mode(low_cost_mode)
+	if is_instance_valid(design):
+		design.visible = !active
+	if is_instance_valid(show_rig):
+		show_rig.visible = true
+		show_rig.set_show_lighting_enabled(not active and not low_cost_mode)
 
-func is_battery_low_warning() -> bool:
-	return false
+func set_low_cost_mode(enabled: bool) -> void:
+	low_cost_mode = enabled
+	if is_instance_valid(show_rig):
+		show_rig.set_low_cost_mode(enabled)
+		show_rig.visible = true
+		if speed_multiplier > 1.0:
+			show_rig.set_show_lighting_enabled(false)
+	if is_instance_valid(design) and speed_multiplier <= 1.0:
+		design.visible = true
+
+func set_low_detail_visuals(enabled: bool) -> void:
+	low_detail_visuals = enabled
+	if is_instance_valid(show_rig):
+		show_rig.visible = true
+
+func set_show_lighting_enabled(enabled: bool) -> void:
+	if is_instance_valid(show_rig):
+		show_rig.set_show_lighting_enabled(enabled)
+
+@onready var design = $Design
+@onready var collision_shape: CollisionShape3D = $Collision
+var drone_model: Node3D
+var propellers: Array[Node3D] = []
+var show_rig: DroneShowLightRig
+var low_detail_visuals: bool = false
+const CAMERA_COLLISION_LAYER := 1 << 31
+
+func _ready():
+	add_to_group("drone_quality_targets")
+	# Prevent drones from colliding with the swarm camera rig.
+	# The camera controller assigns the camera to a dedicated collision layer.
+	collision_layer = 1
+	collision_mask = collision_mask & ~CAMERA_COLLISION_LAYER
+	# Professional heavy physics for maximum stability
+	mass = 5.0
+	gravity_scale = 1.0
+	linear_damp = 2.0
+	angular_damp = 8.0
+	
+	process_mode = Node.PROCESS_MODE_PAUSABLE
+	
+	# Enable collision detection for sound
+	contact_monitor = true
+	max_contacts_reported = 4
+	body_entered.connect(_on_drone_collision)
+	
+	# Ensure collision shape is properly set on the body
+	collision_shape.shape = BoxShape3D.new()
+	collision_shape.shape.size = Vector3(1.2, 0.2, 1.2)
+	collision_shape.transform = Transform3D.IDENTITY
+	
+	# Find and initialize propellers from the built-in Godot scene model
+	propellers.clear()
+	var props_node = design.get_node_or_null("Props")
+	if props_node:
+		for prop in props_node.get_children():
+			if prop is Node3D:
+				propellers.append(prop)
+		print("Drone: Found ", propellers.size(), " procedural propellers in the Godot model.")
+
+	setup_show_lights()
+	apply_hover_mode()
 
 func replace_drone_model():
 	print("Drone: Starting model replacement...")
