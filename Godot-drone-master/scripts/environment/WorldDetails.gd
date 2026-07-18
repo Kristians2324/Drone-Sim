@@ -7,10 +7,10 @@ class_name WorldDetails
 
 var tree_colors = [Color(0.1, 0.4, 0.1), Color(0.15, 0.35, 0.1), Color(0.2, 0.4, 0.15)]
 
-const WALL_ALBEDO := preload("res://assets/textures/real_bark_albedo.png")
-const WALL_NORMAL := preload("res://assets/textures/wall_normal.png")
-const METAL_ALBEDO := preload("res://assets/textures/real_rock_albedo.png")
-const METAL_NORMAL := preload("res://assets/textures/metal_normal.png")
+var WALL_ALBEDO := load("res://assets/textures/real_bark_albedo.png")
+var WALL_NORMAL := load("res://assets/textures/wall_normal.png")
+var METAL_ALBEDO := load("res://assets/textures/real_rock_albedo.png")
+var METAL_NORMAL := load("res://assets/textures/metal_normal.png")
 
 func _build_tree_material() -> StandardMaterial3D:
 	var tree_mat := StandardMaterial3D.new()

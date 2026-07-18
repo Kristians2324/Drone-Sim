@@ -136,13 +136,27 @@ func spawn_drone():
 	if drone and is_instance_valid(drone):
 		return
 
-	drone = drone_scene.instantiate()
-	get_parent().call_deferred("add_child", drone)
-	drone.call_deferred("set", "global_position", Vector3(0, 5, 0))
-	recharge_structure = launch_pad
+	# Wait for physics so we can get ground height
+	await get_tree().physics_frame
+	
+	# Position the launch pad at 350, 350 snapped to terrain height
+	if launch_pad and is_instance_valid(launch_pad):
+		var y_height = get_terrain_height_at(Vector3(350.0, 0.0, 350.0))
+		launch_pad.global_position = Vector3(350.0, y_height, 350.0)
+		launch_pad.visible = true
 
+	drone = drone_scene.instantiate()
+	get_parent().add_child(drone)
+	
+	if launch_pad and is_instance_valid(launch_pad):
+		# Start on top of the tower (18m height + half height stand)
+		drone.global_position = launch_pad.global_position + Vector3(0.0, 18.5, 0.0)
+	else:
+		drone.global_position = Vector3(0.0, 5.0, 0.0)
+		
+	recharge_structure = launch_pad
 	update_camera_views()
-	print("DroneControllerManager: Spawned player drone.")
+	print("DroneControllerManager: Spawned player drone at RechargeTower starting pad.")
 
 func _setup_mavlink_bridge() -> void:
 	if not use_mavlink_bridge:
@@ -298,6 +312,18 @@ func _update_low_battery_behavior(delta: float) -> void:
 	if not drone or not is_instance_valid(drone):
 		return
 
+	# Manual landing recharge detection:
+	var recharge_node := _get_recharge_target()
+	if recharge_node and is_instance_valid(recharge_node):
+		var horiz_dist = Vector2(drone.global_position.x, drone.global_position.z).distance_to(Vector2(recharge_node.global_position.x, recharge_node.global_position.z))
+		var vert_dist = absf(drone.global_position.y - (recharge_node.global_position.y + 18.0))
+		if horiz_dist <= 6.5 and vert_dist <= 2.2:
+			if drone.linear_velocity.length() < 0.6:
+				if drone.has_method("start_battery_recharge") and not drone.get("battery_recharging"):
+					drone.start_battery_recharge()
+					print("DroneControllerManager: Drone manually landed on RechargeTower - Recharging started!")
+					return
+
 	if drone.has_method("is_battery_empty") and drone.is_battery_empty():
 		return
 
@@ -363,13 +389,15 @@ func _get_recharge_target() -> Node3D:
 	return null
 
 func get_terrain_height_at(pos: Vector3) -> float:
-	var space_state = drone.get_world_3d().direct_space_state
+	var space_state = get_world_3d().direct_space_state
 	if not space_state:
 		return 0.0
-	var from = Vector3(pos.x, 300.0, pos.z)
+	var from = Vector3(pos.x, 500.0, pos.z)
 	var to = Vector3(pos.x, -50.0, pos.z)
 	var query = PhysicsRayQueryParameters3D.create(from, to)
-	query.exclude = [drone.get_rid()]
+	query.collision_mask = 2 # ONLY collide with Terrain layer 2
+	if drone and is_instance_valid(drone):
+		query.exclude = [drone.get_rid()]
 	var result = space_state.intersect_ray(query)
 	if result.has("position"):
 		return result.position.y
@@ -853,6 +881,7 @@ func create_launch_pad() -> void:
 	launch_pad.name = "RechargeTower"
 	launch_pad.collision_layer = 1
 	launch_pad.collision_mask = 1
+	launch_pad.position = Vector3(350.0, 0.0, 350.0)
 	add_child(launch_pad)
 
 	var collision_shape: CollisionShape3D = CollisionShape3D.new()
@@ -863,17 +892,44 @@ func create_launch_pad() -> void:
 	collision_shape.position = Vector3(0.0, 9.0, 0.0)
 	launch_pad.add_child(collision_shape)
 
+	# Main Tower: Hexagonal futuristic obelisk
 	var tower := MeshInstance3D.new()
 	var tower_mesh := CylinderMesh.new()
 	tower_mesh.top_radius = 4.8
 	tower_mesh.bottom_radius = 5.6
 	tower_mesh.height = 18.0
-	tower_mesh.radial_segments = 24
+	tower_mesh.radial_segments = 6 # Sleek hexagonal structure
 	tower.mesh = tower_mesh
 	tower.position = Vector3(0.0, 9.0, 0.0)
-	tower.rotation_degrees.x = 0.0
 	launch_pad.add_child(tower)
 
+	# Futuristic materials
+	var pad_mat := StandardMaterial3D.new()
+	pad_mat.albedo_color = Color(0.12, 0.12, 0.15, 1.0) # Carbon dark finish
+	pad_mat.metallic = 0.85
+	pad_mat.roughness = 0.2
+	tower.material_override = pad_mat
+
+	var neon_mat := StandardMaterial3D.new()
+	neon_mat.albedo_color = Color(1.0, 0.45, 0.0, 1.0) # Golden/orange neon highlights
+	neon_mat.emission_enabled = true
+	neon_mat.emission = Color(1.0, 0.45, 0.0, 1.0)
+	neon_mat.emission_energy_multiplier = 3.5
+	neon_mat.roughness = 0.1
+
+	# 6 Vertical neon columns running up the corners of the hexagon
+	var corner_radius = 5.3
+	for i in range(6):
+		var angle = i * PI / 3.0
+		var bar := MeshInstance3D.new()
+		var bar_mesh := BoxMesh.new()
+		bar_mesh.size = Vector3(0.2, 18.0, 0.2)
+		bar.mesh = bar_mesh
+		bar.position = Vector3(cos(angle) * corner_radius, 9.0, sin(angle) * corner_radius)
+		bar.material_override = neon_mat
+		launch_pad.add_child(bar)
+
+	# Charging stand
 	var landing_stand := MeshInstance3D.new()
 	var stand_mesh := CylinderMesh.new()
 	stand_mesh.top_radius = 1.2
@@ -882,14 +938,27 @@ func create_launch_pad() -> void:
 	stand_mesh.radial_segments = 16
 	landing_stand.mesh = stand_mesh
 	landing_stand.position = Vector3(0.0, 1.25, 0.0)
+	landing_stand.material_override = pad_mat
 	launch_pad.add_child(landing_stand)
+
+	# Glowing Torus charging ring sitting on the top surface
+	var pad_ring := MeshInstance3D.new()
+	var ring_mesh := TorusMesh.new()
+	ring_mesh.outer_radius = 1.1
+	ring_mesh.inner_radius = 0.95
+	pad_ring.mesh = ring_mesh
+	pad_ring.position = Vector3(0.0, 2.51, 0.0)
+	pad_ring.material_override = neon_mat
+	launch_pad.add_child(pad_ring)
+
+	# Soft pulsing top OmniLight3D
+	var top_light := OmniLight3D.new()
+	top_light.light_color = Color(1.0, 0.45, 0.0)
+	top_light.light_energy = 2.5
+	top_light.omni_range = 15.0
+	top_light.position = Vector3(0.0, 3.5, 0.0)
+	launch_pad.add_child(top_light)
 
 	launch_pad_mesh = tower
 	launch_pad_marker = null
-
-	var pad_mat := StandardMaterial3D.new()
-	pad_mat.albedo_color = Color(0.18, 0.18, 0.2, 1.0)
-	pad_mat.roughness = 0.7
-	tower.material_override = pad_mat
-	landing_stand.material_override = pad_mat
-	launch_pad.visible = false
+	launch_pad.visible = true

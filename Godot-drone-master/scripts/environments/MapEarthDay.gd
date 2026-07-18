@@ -2,46 +2,33 @@ class_name MapEarthDay
 extends BaseEnvironment
 
 func setup_environment():
-	# Environment (Sky/Lighting)
-	var env_scene = preload("res://scenes/Environment.tscn").instantiate()
+	# 1. Environment (Sky/Lighting)
+	var env_scene = load("res://scenes/Environment.tscn").instantiate()
 	add_child(env_scene)
 	
-	# Terrain
-	var terrain_scene = preload("res://scenes/Terrain.tscn").instantiate()
+	# 2. Terrain (Ground & Mountains)
+	var terrain_scene = load("res://scenes/Terrain.tscn").instantiate()
 	add_child(terrain_scene)
 
-	# Apply lightweight visual setup so the runtime scene actually changes.
-	var env_setup = Node3D.new()
-	env_setup.set_script(preload("res://scripts/environment/EnvironmentSetup.gd"))
-	env_setup.directional_light_path = NodePath("../Environment/DirectionalLight3D")
-	add_child(env_setup)
-
-	var terrain_setup = Node.new()
-	terrain_setup.set_script(preload("res://scripts/environment/TerrainMaterialSetup.gd"))
-	terrain_setup.terrain_material_path = terrain_scene.get_path()
-	add_child(terrain_setup)
-	
 	# Mountains
 	var mountain_scene = preload("res://scenes/Mountain.tscn")
 	var m1 = mountain_scene.instantiate()
-	m1.transform = Transform3D().translated(Vector3(300, 0, -200))
+	m1.transform = Transform3D(Basis().scaled(Vector3(8.0, 8.0, 8.0)), Vector3(1200, 0, -600))
 	add_child(m1)
 	
 	var m2 = mountain_scene.instantiate()
-	m2.transform = Transform3D(Basis().scaled(Vector3(1.5, 1.5, 1.5)), Vector3(-400, 0, -500))
+	m2.transform = Transform3D(Basis().scaled(Vector3(12.0, 10.0, 12.0)), Vector3(-1200, 0, 800))
 	add_child(m2)
-	
-	# Town
+
+	# 3. Town (Procedural Skyscrapers)
 	var town = Node3D.new()
+	town.name = "Town"
 	town.set_script(preload("res://scripts/TownGenerator.gd"))
 	add_child(town)
+	town.generate()
 
-	# Trees
-	var tree_spawner = MultiMeshInstance3D.new()
-	tree_spawner.set_script(preload("res://scripts/environment/TreeSpawner.gd"))
-	tree_spawner.terrain_root_path = terrain_scene.get_path()
-	tree_spawner.collision_parent_path = get_path()
-	add_child(tree_spawner)
-	
-	# Foosball Table
-	add_foosball_table(Vector3(50, 0, 50), Vector3(0, 10, 0), Vector3(5, 5, 5))
+	# 4. World Details (Procedural Trees/Rocks)
+	var world_details = Node3D.new()
+	world_details.name = "WorldDetails"
+	world_details.set_script(preload("res://scripts/WorldDetailManager.gd"))
+	add_child(world_details)

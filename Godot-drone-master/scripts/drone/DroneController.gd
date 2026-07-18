@@ -8,7 +8,6 @@ class_name DroneController
 @onready var physics_component: Node3D = $Physics
 @onready var input_component: Node3D = $InputHandler
 @onready var audio_component: Node3D = $Audio
-var wind_indicator: WindIndicator
 var wind_manager: WindManager
 
 # Configuration
@@ -63,8 +62,7 @@ func _ready():
 	wind_manager = get_tree().current_scene.get_node_or_null("WindManager") as WindManager if get_tree().current_scene else null
 	if wind_manager and wind_manager.has_signal("wind_changed") and not wind_manager.wind_changed.is_connected(_on_wind_changed):
 		wind_manager.wind_changed.connect(_on_wind_changed)
-	_setup_wind_indicator()
-	_update_wind_indicator()
+	_on_wind_changed_initial()
 
 func _physics_process(delta):
 	if get_tree().paused:
@@ -140,29 +138,15 @@ func set_config(config: Dictionary):
 		physics_component.set_wind(wind_direction, wind_strength)
 	if physics_component and physics_component.has_method("set_wind_profile") and wind_manager:
 		physics_component.set_wind_profile(wind_manager.wind_direction, wind_manager.get_wind_strength(), wind_manager.gust_factor, wind_manager.get_state_name())
-	_update_wind_indicator()
 
 func set_audio_enabled(enabled: bool) -> void:
 	audio_enabled = enabled
 	if audio_component and audio_component.has_method("set_audio_enabled"):
 		audio_component.set_audio_enabled(enabled)
 
-func _setup_wind_indicator() -> void:
-	if wind_indicator != null:
-		return
-	wind_indicator = WindIndicator.new()
-	wind_indicator.name = "WindIndicator"
-	add_child(wind_indicator)
-
-func _update_wind_indicator() -> void:
-	if wind_indicator == null:
-		return
-	var display_direction := wind_direction
-	var display_strength := wind_strength
+func _on_wind_changed_initial() -> void:
 	if wind_manager:
-		display_direction = wind_manager.wind_direction
-		display_strength = wind_manager.get_wind_strength()
-	wind_indicator.set_wind(display_direction, display_strength)
+		_on_wind_changed(wind_manager.wind_direction, wind_manager.get_wind_strength(), wind_manager.gust_factor, wind_manager.get_state_name())
 
 func _on_wind_changed(direction: Vector3, strength: float, gust_factor: float, state_name: String) -> void:
 	wind_direction = direction
@@ -171,4 +155,3 @@ func _on_wind_changed(direction: Vector3, strength: float, gust_factor: float, s
 		physics_component.set_wind_profile(direction, strength, gust_factor, state_name)
 	elif physics_component and physics_component.has_method("set_wind"):
 		physics_component.set_wind(direction, strength)
-	_update_wind_indicator()

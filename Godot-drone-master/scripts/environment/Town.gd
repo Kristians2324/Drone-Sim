@@ -5,8 +5,8 @@ class_name Town
 @export var spacing: float = 15.0
 @export_file("*.tscn") var house_scene_path: String = "res://scenes/House.tscn"
 
-const FLOOR_ALBEDO := preload("res://assets/textures/floor_albedo.png")
-const FLOOR_NORMAL := preload("res://assets/textures/floor_normal.png")
+var FLOOR_ALBEDO := load("res://assets/textures/floor_albedo.png")
+var FLOOR_NORMAL := load("res://assets/textures/floor_normal.png")
 
 var house_scene: PackedScene
 

@@ -1,83 +1,70 @@
 extends Node3D
 class_name Terrain
 
-@export var size: Vector2 = Vector2(2000, 2000)
+@export var size: Vector2 = Vector2(4000, 4000)
 
-const FLOOR_ALBEDO := preload("res://assets/textures/floor_albedo.png")
-const FLOOR_NORMAL := preload("res://assets/textures/floor_normal.png")
+func _ready() -> void:
+	_apply_dynamic_materials()
 
-func _build_ground_material() -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_texture = FLOOR_ALBEDO
-	material.normal_texture = FLOOR_NORMAL
-	material.normal_enabled = true
-	material.roughness = 1.0
-	material.albedo_color = Color(0.58, 0.56, 0.5)
-	material.metallic = 0.0
-	material.uv1_scale = Vector3(48, 48, 48)
-	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
-	material.detail_enabled = true
-	material.detail_uv_layer = 0
-	material.detail_blend_mode = BaseMaterial3D.DETAIL_BLEND_MODE_MIX
-	return material
+func _apply_dynamic_materials() -> void:
+	# 1. Setup grass material
+	var grass_mat := StandardMaterial3D.new()
+	grass_mat.albedo_color = Color(0.18, 0.28, 0.14, 1)
+	grass_mat.roughness = 0.95
+	grass_mat.specular = 0.05
+	
+	# Safely attempt to load the grass textures if they exist and are imported
+	var albedo_tex = load("res://assets/textures/grass/Grass001_1K-JPG_Color.jpg")
+	if albedo_tex:
+		grass_mat.albedo_texture = albedo_tex
+		grass_mat.albedo_color = Color.WHITE # Reset color override so texture shows fully
+		
+	var normal_tex = load("res://assets/textures/grass/Grass001_1K-JPG_NormalGL.jpg")
+	if normal_tex:
+		grass_mat.normal_enabled = true
+		grass_mat.normal_texture = normal_tex
+		
+	var roughness_tex = load("res://assets/textures/grass/Grass001_1K-JPG_Roughness.jpg")
+	if roughness_tex:
+		grass_mat.roughness_texture = roughness_tex
+		
+	var ao_tex = load("res://assets/textures/grass/Grass001_1K-JPG_AmbientOcclusion.jpg")
+	if ao_tex:
+		grass_mat.ao_enabled = true
+		grass_mat.ao_light_affect = 1.0
+		grass_mat.ao_texture = ao_tex
+		
+	# Anisotropic filtering + lower UV scale = no more dotted/sharp look at distance.
+	# Anisotropic specifically fixes the grazing-angle aliasing that causes the noise pattern.
+	grass_mat.uv1_scale = Vector3(28, 28, 28)
+	grass_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	
+	# Apply to flat floor
+	var floor_mesh = get_node_or_null("FallbackFloor/MeshInstance3D")
+	if floor_mesh:
+		floor_mesh.material_override = grass_mat
 
-func generate():
-	# Fallback floor
-	var floor_body = StaticBody3D.new()
-	floor_body.name = "FallbackFloor"
-	add_child(floor_body)
+	# 2. Setup mountain material
+	var mountain_mat := StandardMaterial3D.new()
+	mountain_mat.albedo_color = Color(0.24, 0.24, 0.26, 1)
+	mountain_mat.roughness = 0.95
+	mountain_mat.specular = 0.05
 	
-	var collision = CollisionShape3D.new()
-	collision.shape = WorldBoundaryShape3D.new()
-	floor_body.add_child(collision)
+	var rock_tex = load("res://assets/textures/real_rock_albedo.png")
+	if rock_tex:
+		mountain_mat.albedo_texture = rock_tex
+		mountain_mat.albedo_color = Color.WHITE
+		
+	mountain_mat.uv1_scale = Vector3(15, 15, 15)
+	mountain_mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	
-	var mesh_instance = MeshInstance3D.new()
-	var plane_mesh = PlaneMesh.new()
-	plane_mesh.size = size
-	var material = _build_ground_material()
-	mesh_instance.mesh = plane_mesh
-	mesh_instance.material_override = material
-	floor_body.add_child(mesh_instance)
-	
-	# Landform
-	var landform = CSGCombiner3D.new()
-	landform.name = "Landform"
-	landform.use_collision = true
-	add_child(landform)
-	
-	# Add some hills and terrain variation
-	var hill1 = CSGSphere3D.new()
-	hill1.name = "Hill1"
-	hill1.transform.origin = Vector3(50, -30, -80)
-	hill1.radius = 60.0
-	hill1.radial_segments = 24
-	landform.add_child(hill1)
+	# Apply to hills
+	var landform = get_node_or_null("Landform")
+	if landform:
+		for child in landform.get_children():
+			if child is CSGShape3D and child.name.begins_with("Hill"):
+				child.material = mountain_mat
 
-	var hill4 = CSGSphere3D.new()
-	hill4.name = "Hill4"
-	hill4.transform.origin = Vector3(-220, -35, -170)
-	hill4.radius = 120.0
-	hill4.radial_segments = 24
-	landform.add_child(hill4)
-	
-	var hill2 = CSGSphere3D.new()
-	hill2.name = "Hill2"
-	hill2.transform.origin = Vector3(-120, -20, 40)
-	hill2.radius = 80.0
-	hill2.radial_segments = 24
-	landform.add_child(hill2)
-	
-	var valley = CSGSphere3D.new()
-	valley.name = "Valley"
-	valley.transform.origin = Vector3(0, -5, 0)
-	valley.operation = CSGShape3D.OPERATION_SUBTRACTION
-	valley.radius = 30.0
-	valley.radial_segments = 24
-	landform.add_child(valley)
-	
-	var hill3 = CSGSphere3D.new()
-	hill3.name = "Hill3"
-	hill3.transform.origin = Vector3(200, -25, 150)
-	hill3.radius = 100.0
-	hill3.radial_segments = 24
-	landform.add_child(hill3)
+func generate() -> void:
+	# Kept for compatibility with other scripts calling .generate()
+	pass

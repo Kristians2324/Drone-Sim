@@ -85,11 +85,11 @@ func _build_rig():
 	halo_mesh = MeshInstance3D.new()
 	halo_mesh.name = "UnderglowDisc"
 	var disc = CylinderMesh.new()
-	disc.top_radius = 0.12
-	disc.bottom_radius = 0.22
-	disc.height = 0.03
+	disc.top_radius = 0.03
+	disc.bottom_radius = 0.05
+	disc.height = 0.01
 	halo_mesh.mesh = disc
-	halo_mesh.position = Vector3(0.0, -0.03, 0.0)
+	halo_mesh.position = Vector3(0.0, -0.01, 0.0)
 	add_child(halo_mesh)
 
 	halo_material = StandardMaterial3D.new()

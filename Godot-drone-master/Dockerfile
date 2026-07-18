@@ -32,6 +32,7 @@ RUN curl -L ${GODOT_URL} -o /tmp/godot.zip \
 ENV PATH="${GODOT_HOME}:${PATH}"
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

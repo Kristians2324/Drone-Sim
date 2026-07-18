@@ -1,25 +1,14 @@
 [gd_scene load_steps=3 format=3 uid="uid://b5k6l7m8n9o0"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Wall"]
-albedo_texture = ExtResource("1_wall_tex")
-normal_texture = ExtResource("2_wall_normal")
-normal_enabled = true
+albedo_color = Color(0.72, 0.65, 0.58, 1)
 roughness = 0.95
 metallic = 0.0
-uv1_scale = Vector3(3.5, 3.5, 3.5)
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Roof"]
-albedo_texture = ExtResource("3_roof_tex")
-normal_texture = ExtResource("4_roof_normal")
-normal_enabled = true
+albedo_color = Color(0.48, 0.18, 0.15, 1)
 roughness = 0.98
 metallic = 0.02
-uv1_scale = Vector3(4, 4, 4)
-
-[ext_resource type="Texture2D" path="res://assets/textures/real_wall_albedo.png" id="1_wall_tex"]
-[ext_resource type="Texture2D" path="res://assets/textures/wall_normal.png" id="2_wall_normal"]
-[ext_resource type="Texture2D" path="res://assets/textures/real_roof_albedo.png" id="3_roof_tex"]
-[ext_resource type="Texture2D" path="res://assets/textures/metal_normal.png" id="4_roof_normal"]
 
 [node name="House" type="Node3D"]
 
