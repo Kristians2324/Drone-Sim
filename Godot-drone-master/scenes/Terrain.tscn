@@ -1,0 +1,62 @@
+[gd_scene load_steps=6 format=3 uid="uid://d1k3f4g5h6j7"]
+
+[ext_resource type="Script" path="res://scripts/environment/Terrain.gd" id="1_terrain_script"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Grass"]
+albedo_color = Color(0.18, 0.28, 0.14, 1)
+roughness = 0.9
+specular = 0.1
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Mountain"]
+albedo_color = Color(0.24, 0.24, 0.26, 1)
+roughness = 0.95
+specular = 0.05
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_Ground"]
+size = Vector2(4000, 4000)
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_Ground"]
+
+[node name="Terrain" type="Node3D"]
+script = ExtResource("1_terrain_script")
+
+[node name="FallbackFloor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+collision_layer = 2
+collision_mask = 0
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="FallbackFloor"]
+shape = SubResource("WorldBoundaryShape3D_Ground")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="FallbackFloor"]
+material_override = SubResource("StandardMaterial3D_Grass")
+mesh = SubResource("PlaneMesh_Ground")
+
+[node name="Landform" type="CSGCombiner3D" parent="."]
+collision_layer = 2
+collision_mask = 0
+use_collision = true
+
+[node name="Hill1" type="CSGSphere3D" parent="Landform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1000, -80, -1000)
+radius = 250.0
+radial_segments = 36
+material = SubResource("StandardMaterial3D_Mountain")
+
+[node name="Hill2" type="CSGSphere3D" parent="Landform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1000, -80, 1000)
+radius = 300.0
+radial_segments = 36
+material = SubResource("StandardMaterial3D_Mountain")
+
+[node name="Hill3" type="CSGSphere3D" parent="Landform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1000, -100, 1000)
+radius = 350.0
+radial_segments = 36
+material = SubResource("StandardMaterial3D_Mountain")
+
+[node name="Hill4" type="CSGSphere3D" parent="Landform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1000, -100, -1000)
+radius = 280.0
+radial_segments = 36
+material = SubResource("StandardMaterial3D_Mountain")

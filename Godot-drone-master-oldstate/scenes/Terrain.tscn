@@ -1,0 +1,52 @@
+[gd_scene load_steps=5 format=3 uid="uid://d1k3f4g5h6j7"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_Grass"]
+albedo_color = Color(0.13, 0.22, 0.08, 1)
+roughness = 0.8
+normal_enabled = true
+uv1_scale = Vector3(100, 100, 100)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_Ground"]
+size = Vector2(2000, 2000)
+
+[sub_resource type="WorldBoundaryShape3D" id="WorldBoundaryShape3D_Ground"]
+
+[node name="Terrain" type="Node3D"]
+
+[node name="FallbackFloor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="FallbackFloor"]
+shape = SubResource("WorldBoundaryShape3D_Ground")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="FallbackFloor"]
+material_override = SubResource("StandardMaterial3D_Grass")
+mesh = SubResource("PlaneMesh_Ground")
+
+[node name="Landform" type="CSGCombiner3D" parent="."]
+use_collision = true
+
+[node name="Hill1" type="CSGSphere3D" parent="Landform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 50, -30, -80)
+radius = 60.0
+radial_segments = 24
+
+[node name="Hill2" type="CSGSphere3D" parent="Landform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -120, -20, 40)
+radius = 80.0
+radial_segments = 24
+
+[node name="Valley1" type="CSGSphere3D" parent="Landform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -5, 0)
+operation = 2
+radius = 30.0
+radial_segments = 24
+
+[node name="Hill3" type="CSGSphere3D" parent="Landform"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 200, -25, 150)
+radius = 100.0
+radial_segments = 24
+
+[node name="Material" type="CSGCylinder3D" parent="Landform"]
+visible = false
+material = SubResource("StandardMaterial3D_Grass")
